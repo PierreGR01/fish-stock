@@ -1,0 +1,42 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap');
+
+:root {
+  /* Base neutrals */
+  --ink-900: #0A1428;
+  --ink-700: #152238;
+  --ink-500: #2A3A55;
+  --text-hi:  #FFFFFF;
+  --text-mid: rgba(255,255,255,0.78);
+  --text-lo:  rgba(255,255,255,0.45);
+
+  /* Accent (ice/ocean) */
+  --ice:        #A8D8E8;
+  --ice-dim:    rgba(168,216,232,0.12);
+  --ice-border: rgba(168,216,232,0.25);
+
+  /* Signals */
+  --signal-danger: #E5443A;
+  --signal-warn:   #F2A93B;
+  --signal-ok:     #3AC58E;
+  --signal-info:   #4DA8DA;
+
+  --danger-dim: rgba(229, 68,  58,  0.14);
+  --warn-dim:   rgba(242, 169, 59,  0.12);
+  --ok-dim:     rgba(58,  197, 142, 0.12);
+
+  /* Fishery zone colours */
+  --fish-a:       #4DA8DA;
+  --fish-a-dim:   rgba(77, 168, 218, 0.18);
+  --fish-b:       #3AC58E;
+  --fish-b-dim:   rgba(58, 197, 142, 0.18);
+  --fish-c:       #F2A93B;
+  --fish-c-dim:   rgba(242, 169, 59, 0.18);
+
+  /* Typography */
+  --font-ui:   'Inter', sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+
+  /* Radius & spacing */
+  --radius-sm: 3px;
+  --radius-md: 6px;
+}

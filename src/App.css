@@ -1,0 +1,79 @@
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: var(--font-ui);
+  background: var(--ink-900);
+  color: var(--text-hi);
+  overflow: hidden;
+}
+
+/* MapLibre overrides */
+.maplibregl-ctrl-attrib {
+  font-size: 9px !important;
+  background: rgba(10,20,40,0.6) !important;
+}
+.maplibregl-ctrl-group {
+  background: var(--ink-700) !important;
+  border: 1px solid var(--ink-500) !important;
+}
+.maplibregl-ctrl-group button {
+  background-color: transparent !important;
+  color: var(--text-mid) !important;
+}
+.maplibregl-ctrl-group button:hover {
+  background-color: rgba(255,255,255,0.08) !important;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 4px; height: 4px; }
+::-webkit-scrollbar-track { background: var(--ink-700); }
+::-webkit-scrollbar-thumb { background: var(--ink-500); border-radius: 2px; }
+
+/* Hover patterns */
+button {
+  transition: filter 0.1s, opacity 0.1s;
+}
+button:hover:not(:disabled) {
+  filter: brightness(1.22);
+  cursor: pointer;
+}
+button:active:not(:disabled) {
+  filter: brightness(0.85);
+  transform: translateY(1px);
+}
+
+[data-action] {
+  transition: background 0.12s;
+  cursor: pointer;
+}
+[data-action]:hover {
+  background: rgba(255,255,255,0.055) !important;
+}
+
+/* Range input styling */
+input[type=range] {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--ink-500);
+  outline: none;
+  cursor: pointer;
+}
+input[type=range]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--ice);
+  border: 2px solid var(--ink-700);
+  cursor: pointer;
+}
+input[type=range]::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--ice);
+  border: 2px solid var(--ink-700);
+  cursor: pointer;
+}
