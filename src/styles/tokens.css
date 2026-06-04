@@ -39,4 +39,8 @@
   /* Radius & spacing */
   --radius-sm: 3px;
   --radius-md: 6px;
+
+  /* Responsive layout dimensions (overridden in wide-screen media query) */
+  --timeline-h: 84px;
+  --panel-w: 320px;
 }

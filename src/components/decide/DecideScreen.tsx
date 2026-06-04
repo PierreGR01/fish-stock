@@ -1,24 +1,22 @@
+import { useState } from 'react';
 import { useFishStore } from '../../store/fishStore';
 import type { MapLayer } from '../../store/fishStore';
 import { PacificMap } from '../map/PacificMap';
 import { ResultsPanel } from './ResultsPanel';
 import { GlobalTimeline } from './GlobalTimeline';
+import { SaveScenarioModal } from './SaveScenarioModal';
 import { VERDICT_A, VERDICT_B } from '../../data/mockData';
 
-// ── Scenario recap chips ────────────────────────────────────────────────
+// ── Chip ─────────────────────────────────────────────────────────────────
 
 function Chip({ children }: { children: React.ReactNode }) {
   return (
     <div style={{
       padding: '2px 8px',
-      background: 'var(--ink-500)',
-      border: '1px solid rgba(255,255,255,0.08)',
-      borderRadius: 12,
-      fontFamily: 'var(--font-ui)', fontSize: 9, color: 'var(--text-mid)',
+      background: 'var(--ink-500)', border: '1px solid rgba(255,255,255,0.08)',
+      borderRadius: 12, fontFamily: 'var(--font-ui)', fontSize: 9, color: 'var(--text-mid)',
       whiteSpace: 'nowrap',
-    }}>
-      {children}
-    </div>
+    }}>{children}</div>
   );
 }
 
@@ -27,18 +25,16 @@ function VerdictArrow({ trend, small }: { trend: 'up' | 'down'; small?: boolean 
     <div style={{
       width: small ? 32 : 40, height: small ? 32 : 40,
       border: `2px solid ${trend === 'down' ? 'var(--signal-danger)' : 'var(--signal-ok)'}`,
-      borderRadius: '50%',
-      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center',
       fontSize: small ? 16 : 20,
-      color: trend === 'down' ? 'var(--signal-danger)' : 'var(--signal-ok)',
-      flexShrink: 0,
+      color: trend === 'down' ? 'var(--signal-danger)' : 'var(--signal-ok)', flexShrink: 0,
     }}>
       {trend === 'down' ? '↘' : '↗'}
     </div>
   );
 }
 
-// ── Banner (single scenario) ─────────────────────────────────────────────
+// ── SingleBanner ─────────────────────────────────────────────────────────
 
 function SingleBanner() {
   const {
@@ -46,16 +42,14 @@ function SingleBanner() {
     catchConcentration, closures, climateScenario, climateModels,
     setComparisonMode, setPhase,
   } = useFishStore();
+  const [showSaveModal, setShowSaveModal] = useState(false);
 
   return (
     <div style={{
       display: 'flex', alignItems: 'center', gap: 16,
-      padding: '8px 16px',
-      background: 'var(--ink-700)',
-      borderBottom: '1px solid var(--ink-500)',
-      flexShrink: 0, minHeight: 58,
+      padding: '8px 16px', background: 'var(--ink-700)',
+      borderBottom: '1px solid var(--ink-500)', flexShrink: 0, minHeight: 58,
     }}>
-      {/* Scenario chips */}
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ fontFamily: 'var(--font-ui)', fontSize: 8, textTransform: 'uppercase', letterSpacing: '0.5px', color: 'var(--text-lo)', marginBottom: 5 }}>
           Active scenario — key parameters
@@ -71,7 +65,6 @@ function SingleBanner() {
         </div>
       </div>
 
-      {/* Verdict */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
         <div>
           <div style={{ fontFamily: 'var(--font-ui)', fontSize: 8, textTransform: 'uppercase', letterSpacing: '0.5px', color: 'var(--text-lo)', marginBottom: 4 }}>Verdict</div>
@@ -79,15 +72,17 @@ function SingleBanner() {
             <VerdictArrow trend={VERDICT_A.trend as 'up' | 'down'} />
             <div>
               <div style={{ fontFamily: 'var(--font-ui)', fontSize: 13, fontWeight: 600, color: 'var(--signal-danger)' }}>{VERDICT_A.text}</div>
-              <div style={{ fontFamily: 'var(--font-ui)', fontSize: 9, color: 'var(--text-lo)' }}>{VERDICT_A.detail} · plain-language read</div>
+              <div style={{ fontFamily: 'var(--font-ui)', fontSize: 9, color: 'var(--text-lo)' }}>{VERDICT_A.detail}</div>
             </div>
           </div>
         </div>
       </div>
 
-      {/* Actions */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 4, flexShrink: 0 }}>
-        <button style={{ padding: '4px 10px', fontSize: 10, fontFamily: 'var(--font-ui)', background: 'var(--ink-500)', border: '1px solid var(--ice-border)', borderRadius: 'var(--radius-sm)', color: 'var(--text-mid)', cursor: 'pointer' }}>
+      <div className="print-hide" style={{ display: 'flex', flexDirection: 'column', gap: 4, flexShrink: 0 }}>
+        {/* TASK-09: Save scenario button */}
+        <button
+          onClick={() => setShowSaveModal(true)}
+          style={{ padding: '4px 10px', fontSize: 10, fontFamily: 'var(--font-ui)', background: 'var(--ink-500)', border: '1px solid var(--ice-border)', borderRadius: 'var(--radius-sm)', color: 'var(--text-mid)', cursor: 'pointer' }}>
           ⤓ Save scenario
         </button>
         <button
@@ -100,25 +95,37 @@ function SingleBanner() {
           style={{ padding: '4px 10px', fontSize: 10, fontFamily: 'var(--font-ui)', background: 'transparent', border: '1px solid var(--ink-500)', borderRadius: 'var(--radius-sm)', color: 'var(--text-lo)', cursor: 'pointer' }}>
           ✎ Modify parameters
         </button>
+        {/* TASK-21: PDF export */}
+        <button
+          onClick={() => {
+            const date = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+            const prev = document.title;
+            document.title = `FISHSTOCK_${date}_Scenario1`;
+            window.print();
+            document.title = prev;
+          }}
+          style={{ padding: '4px 10px', fontSize: 10, fontFamily: 'var(--font-ui)', background: 'transparent', border: '1px solid var(--ink-500)', borderRadius: 'var(--radius-sm)', color: 'var(--text-lo)', cursor: 'pointer' }}>
+          ⎙ Exporter en PDF
+        </button>
       </div>
+
+      {showSaveModal && <SaveScenarioModal onClose={() => setShowSaveModal(false)} />}
     </div>
   );
 }
 
-// ── Banner (comparison mode) ─────────────────────────────────────────────
+// ── ComparisonBanner ──────────────────────────────────────────────────────
 
 function ComparisonBanner() {
   const setComparisonMode = useFishStore(s => s.setComparisonMode);
+  const [showSaveModal, setShowSaveModal] = useState(false);
 
   return (
     <div style={{
       display: 'flex', alignItems: 'center', gap: 16,
-      padding: '8px 16px',
-      background: 'var(--ink-700)',
-      borderBottom: '1px solid var(--ink-500)',
-      flexShrink: 0, minHeight: 66,
+      padding: '8px 16px', background: 'var(--ink-700)',
+      borderBottom: '1px solid var(--ink-500)', flexShrink: 0, minHeight: 66,
     }}>
-      {/* Two verdicts */}
       <div style={{ flex: 1 }}>
         <div style={{ fontFamily: 'var(--font-ui)', fontSize: 8, textTransform: 'uppercase', letterSpacing: '0.5px', color: 'var(--text-lo)', marginBottom: 6 }}>
           Comparison — two verdicts
@@ -138,35 +145,31 @@ function ComparisonBanner() {
         </div>
       </div>
 
-      {/* Delta */}
       <div style={{ textAlign: 'center', padding: '0 16px', borderLeft: '1px solid var(--ink-500)', borderRight: '1px solid var(--ink-500)' }}>
-        <div style={{ fontFamily: 'var(--font-ui)', fontSize: 8, textTransform: 'uppercase', letterSpacing: '0.5px', color: 'var(--text-lo)', marginBottom: 4 }}>
-          Difference (B − A)
-        </div>
+        <div style={{ fontFamily: 'var(--font-ui)', fontSize: 8, textTransform: 'uppercase', letterSpacing: '0.5px', color: 'var(--text-lo)', marginBottom: 4 }}>Difference (B − A)</div>
         <div style={{ fontFamily: 'var(--font-mono)', fontSize: 22, fontWeight: 600, color: 'var(--signal-ok)' }}>+31</div>
         <div style={{ fontFamily: 'var(--font-ui)', fontSize: 10, color: 'var(--text-mid)' }}>pts biomass</div>
         <div style={{ fontFamily: 'var(--font-ui)', fontSize: 8, color: 'var(--text-lo)' }}>B closes more zones + lower catch C</div>
       </div>
 
-      {/* Actions */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 4, flexShrink: 0 }}>
-        <button style={{ padding: '4px 10px', fontSize: 10, fontFamily: 'var(--font-ui)', background: 'var(--ink-500)', border: '1px solid var(--ice-border)', borderRadius: 'var(--radius-sm)', color: 'var(--text-mid)', cursor: 'pointer' }}>
+        <button onClick={() => setShowSaveModal(true)} style={{ padding: '4px 10px', fontSize: 10, fontFamily: 'var(--font-ui)', background: 'var(--ink-500)', border: '1px solid var(--ice-border)', borderRadius: 'var(--radius-sm)', color: 'var(--text-mid)', cursor: 'pointer' }}>
           ⤓ Save comparison
         </button>
-        <button
-          onClick={() => setComparisonMode(false)}
-          style={{ padding: '4px 10px', fontSize: 10, fontFamily: 'var(--font-ui)', background: 'transparent', border: '1px solid var(--ink-500)', borderRadius: 'var(--radius-sm)', color: 'var(--text-lo)', cursor: 'pointer' }}>
+        <button onClick={() => setComparisonMode(false)} style={{ padding: '4px 10px', fontSize: 10, fontFamily: 'var(--font-ui)', background: 'transparent', border: '1px solid var(--ink-500)', borderRadius: 'var(--radius-sm)', color: 'var(--text-lo)', cursor: 'pointer' }}>
           ✕ Exit comparison
         </button>
         <button style={{ padding: '4px 10px', fontSize: 10, fontFamily: 'var(--font-ui)', background: 'transparent', border: '1px solid var(--ice-border)', borderRadius: 'var(--radius-sm)', color: 'var(--ice)', cursor: 'pointer' }}>
           + Add a scenario
         </button>
       </div>
+
+      {showSaveModal && <SaveScenarioModal onClose={() => setShowSaveModal(false)} />}
     </div>
   );
 }
 
-// ── Map layer selector ────────────────────────────────────────────────────
+// ── LayerSelector ─────────────────────────────────────────────────────────
 
 function LayerSelector() {
   const { mapLayer, setMapLayer, comparisonMode, mapScenario, setMapScenario } = useFishStore();
@@ -176,8 +179,7 @@ function LayerSelector() {
       display: 'flex', alignItems: 'center', gap: 10,
       padding: '6px 12px',
       background: 'rgba(10,20,40,0.85)',
-      borderBottom: '1px solid var(--ink-500)',
-      flexShrink: 0,
+      borderBottom: '1px solid var(--ink-500)', flexShrink: 0,
     }}>
       {comparisonMode && (
         <>
@@ -195,7 +197,6 @@ function LayerSelector() {
           </div>
         </>
       )}
-
       <span style={{ fontFamily: 'var(--font-ui)', fontSize: 9, color: 'var(--text-lo)' }}>
         {comparisonMode ? '' : 'Map layer:'}
       </span>
@@ -206,8 +207,7 @@ function LayerSelector() {
             background: mapLayer === l ? 'var(--ice-dim)' : 'transparent',
             border: 'none', borderRight: l !== 'recruitment' ? '1px solid var(--ice-border)' : 'none',
             color: mapLayer === l ? 'var(--ice)' : 'var(--text-lo)',
-            cursor: 'pointer', fontWeight: mapLayer === l ? 600 : 400,
-            textTransform: 'capitalize',
+            cursor: 'pointer', fontWeight: mapLayer === l ? 600 : 400, textTransform: 'capitalize',
           }}>{l}</button>
         ))}
       </div>
@@ -218,7 +218,7 @@ function LayerSelector() {
   );
 }
 
-// ── Comparison data columns ───────────────────────────────────────────────
+// ── ComparisonColumns ─────────────────────────────────────────────────────
 
 function ComparisonColumns() {
   const SCENARIO_B_CHIPS = ['C East 15 000 · ↓', 'PIPA, Nauru, Tuvalu', 'IPCC Low'];
@@ -226,7 +226,6 @@ function ComparisonColumns() {
 
   return (
     <div style={{ flex: 1, display: 'flex', overflow: 'hidden', minHeight: 0 }}>
-      {/* Column A */}
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', borderRight: '1px solid var(--ink-500)' }}>
         <div style={{ padding: '8px 12px', borderBottom: '1px solid var(--ink-500)', flexShrink: 0 }}>
           <div style={{ fontFamily: 'var(--font-ui)', fontSize: 11, fontWeight: 600, color: 'var(--text-hi)', marginBottom: 4 }}>Scenario A</div>
@@ -238,8 +237,6 @@ function ComparisonColumns() {
           <ResultsPanel scenario="A" compact />
         </div>
       </div>
-
-      {/* Column B */}
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
         <div style={{ padding: '8px 12px', borderBottom: '1px solid var(--ink-500)', flexShrink: 0 }}>
           <div style={{ fontFamily: 'var(--font-ui)', fontSize: 11, fontWeight: 600, color: 'var(--text-hi)', marginBottom: 4 }}>Scenario B</div>
@@ -255,35 +252,30 @@ function ComparisonColumns() {
   );
 }
 
-// ── Main Decide screen ────────────────────────────────────────────────────
+// ── Main DecideScreen ─────────────────────────────────────────────────────
 
 export function DecideScreen() {
   const comparisonMode = useFishStore(s => s.comparisonMode);
 
   return (
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minHeight: 0 }}>
-      {/* Top banner */}
       {comparisonMode ? <ComparisonBanner /> : <SingleBanner />}
 
-      {/* Body: map + data */}
       <div style={{ flex: 1, display: 'flex', overflow: 'hidden', minHeight: 0 }}>
-        {/* Map (55%) */}
-        <div style={{ flex: '0 0 55%', display: 'flex', flexDirection: 'column', overflow: 'hidden', borderRight: '1px solid var(--ink-500)' }}>
+        {/* Map 55% — hidden in print */}
+        <div className="print-hide" style={{ flex: '0 0 55%', display: 'flex', flexDirection: 'column', overflow: 'hidden', borderRight: '1px solid var(--ink-500)' }}>
           <LayerSelector />
-          <div style={{ flex: 1, overflow: 'hidden' }}>
+          <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
             <PacificMap phase="decide" />
           </div>
         </div>
 
-        {/* Data panel (45%) */}
-        <div style={{ flex: '0 0 45%', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
-          {comparisonMode
-            ? <ComparisonColumns />
-            : <ResultsPanel />}
+        {/* Data panel 45% — full width in print */}
+        <div className="print-results" style={{ flex: '0 0 45%', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+          {comparisonMode ? <ComparisonColumns /> : <ResultsPanel />}
         </div>
       </div>
 
-      {/* Global timeline */}
       <GlobalTimeline />
     </div>
   );

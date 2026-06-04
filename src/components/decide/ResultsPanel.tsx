@@ -1,11 +1,70 @@
+// TASK-11/12/13 — ResultsPanel with KPI cards, annotated charts, Y axis
 import { useMemo } from 'react';
 import { useFishStore } from '../../store/fishStore';
 import {
-  YEARS, YEAR_NOW_IDX,
+  YEARS, YEAR_NOW_IDX, HISTORY_END,
   BIOMASS_A, CATCH_A, RECRUITMENT_A, SIZE_DIST_A_R1, SIZE_DIST_A_R2,
   BIOMASS_B, CATCH_B, RECRUITMENT_B, SIZE_DIST_B_R1, SIZE_DIST_B_R2,
 } from '../../data/mockData';
 import { LineChart, HistogramChart } from './LineChart';
+
+// ── KPI calculation helpers ────────────────────────────────────────────────
+
+function calcKPIs(biomass: number[]) {
+  const base  = biomass[YEAR_NOW_IDX];
+  const v2055 = biomass[45]; // 2055 = index 45
+  const v2099 = biomass[89]; // 2099 = index 89
+  const d2055 = base > 0 ? ((v2055 - base) / base * 100) : 0;
+  const d2099 = base > 0 ? ((v2099 - base) / base * 100) : 0;
+
+  let critYear: number | null = null;
+  for (let i = HISTORY_END + 1; i < biomass.length; i++) {
+    if (biomass[i] < 0.7 * base) { critYear = YEARS[i]; break; }
+  }
+
+  return { v2055, v2099, d2055, d2099, critYear };
+}
+
+function KPICard({ label, value, delta, unit, critYear }: {
+  label: string;
+  value?: number;
+  delta?: number;
+  unit?: string;
+  critYear?: number | null;
+}) {
+  const isOk = delta !== undefined ? delta >= 0 : critYear === null;
+  const signalColor = isOk ? 'var(--signal-ok)' : 'var(--signal-danger)';
+
+  return (
+    <div style={{
+      flex: 1,
+      padding: '8px 10px',
+      background: 'var(--ink-500)',
+      borderRadius: 'var(--radius-sm)',
+      border: `1px solid ${isOk ? 'rgba(58,197,142,0.2)' : 'rgba(229,68,58,0.2)'}`,
+    }}>
+      <div style={{ fontFamily: 'var(--font-ui)', fontSize: 8, color: 'var(--text-lo)', marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.4px' }}>
+        {label}
+      </div>
+      {critYear !== undefined ? (
+        <div style={{ fontFamily: 'var(--font-mono)', fontSize: 14, fontWeight: 600, color: signalColor }}>
+          {critYear !== null ? critYear : <span style={{ color: 'var(--signal-ok)', fontSize: 11 }}>Not reached</span>}
+        </div>
+      ) : (
+        <>
+          <div style={{ fontFamily: 'var(--font-mono)', fontSize: 14, fontWeight: 600, color: 'var(--text-hi)' }}>
+            {value?.toFixed(1)} <span style={{ fontSize: 9, fontWeight: 400, color: 'var(--text-lo)' }}>{unit}</span>
+          </div>
+          <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: signalColor, marginTop: 2 }}>
+            {delta !== undefined && (delta >= 0 ? '+' : '')}{delta?.toFixed(1)}% vs 2026
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+// ── Chart block wrapper ───────────────────────────────────────────────────
 
 function ChartBlock({ title, subtitle, children }: { title: string; subtitle?: string; children: React.ReactNode }) {
   return (
@@ -44,23 +103,59 @@ export function ResultsPanel({ scenario = 'A', compact = false }: Props) {
   const sizeR1      = scenario === 'A' ? SIZE_DIST_A_R1 : SIZE_DIST_B_R1;
   const sizeR2      = scenario === 'A' ? SIZE_DIST_A_R2 : SIZE_DIST_B_R2;
 
+  const kpis = useMemo(() => calcKPIs(biomass), [biomass]);
   const chartH = compact ? 44 : 60;
 
   return (
     <div style={{ height: '100%', overflowY: 'auto', padding: compact ? '8px 10px' : '12px 14px' }}>
+
+      {/* TASK-11 — KPI cards */}
+      {!compact && (
+        <div style={{ display: 'flex', gap: 6, marginBottom: 14 }}>
+          <KPICard
+            label="Biomass 2055"
+            value={kpis.v2055}
+            delta={kpis.d2055}
+            unit="t/km²"
+          />
+          <KPICard
+            label="Biomass 2099"
+            value={kpis.v2099}
+            delta={kpis.d2099}
+            unit="t/km²"
+          />
+          <KPICard
+            label="Critical year"
+            critYear={kpis.critYear}
+          />
+        </div>
+      )}
+
       {/* A · Biomass */}
       <ChartBlock title="A · Biomass" subtitle="t/km²">
-        <LineChart data={biomass} height={chartH} color="var(--fish-a)" activeYearIdx={activeIdx >= 0 ? activeIdx : undefined} />
+        <LineChart
+          data={biomass} height={chartH} color="var(--fish-a)"
+          activeYearIdx={activeIdx >= 0 ? activeIdx : undefined}
+          unit="t/km²" showAnnotation={!compact}
+        />
       </ChartBlock>
 
       {/* B · Catch */}
-      <ChartBlock title="B · Catch" subtitle="target — history & projection">
-        <LineChart data={catch_data} height={chartH} color="var(--fish-b)" activeYearIdx={activeIdx >= 0 ? activeIdx : undefined} />
+      <ChartBlock title="B · Catch" subtitle="t/yr">
+        <LineChart
+          data={catch_data} height={chartH} color="var(--fish-b)"
+          activeYearIdx={activeIdx >= 0 ? activeIdx : undefined}
+          unit="t/yr"
+        />
       </ChartBlock>
 
       {/* C · Recruitment */}
-      <ChartBlock title="C · Recruitment" subtitle="history & projection">
-        <LineChart data={recruitment} height={chartH} color="var(--fish-c)" activeYearIdx={activeIdx >= 0 ? activeIdx : undefined} />
+      <ChartBlock title="C · Recruitment" subtitle="index">
+        <LineChart
+          data={recruitment} height={chartH} color="var(--fish-c)"
+          activeYearIdx={activeIdx >= 0 ? activeIdx : undefined}
+          unit="idx"
+        />
       </ChartBlock>
 
       {/* D · Size distribution */}
