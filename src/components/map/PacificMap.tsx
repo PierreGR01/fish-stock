@@ -74,17 +74,21 @@ function heatColor(zoneId: string, year: number, layer: MapLayer, scenario: 'A' 
   }
 }
 
-// TASK-01/03 — WMS tile URLs (CMEMS)
+const WMTS = 'https://wmts.marine.copernicus.eu/teroWmts'
+
 const SST_TILES = [
-  'https://nrt.cmems-du.eu/thredds/wms/global-analysis-forecast-phy-001-024?' +
-  'SERVICE=WMS&VERSION=1.3.0&REQUEST=GetMap&LAYERS=thetao&STYLES=&' +
-  'FORMAT=image/png&TRANSPARENT=TRUE&CRS=EPSG:3857&WIDTH=256&HEIGHT=256&BBOX={bbox-epsg-3857}',
-];
+  `${WMTS}?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0` +
+  `&LAYER=GLOBAL_ANALYSISFORECAST_PHY_001_024/cmems_mod_glo_phy-thetao_anfc_0.083deg_P1D-m_202406/thetao` +
+  `&TILEMATRIXSET=EPSG:3857&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}` +
+  `&FORMAT=image/png&STYLE=default`,
+]
+
 const PLANKTON_TILES = [
-  'https://nrt.cmems-du.eu/thredds/wms/global-analysis-forecast-bio-001-028?' +
-  'SERVICE=WMS&VERSION=1.3.0&REQUEST=GetMap&LAYERS=chl&STYLES=boxfill/viridis&' +
-  'FORMAT=image/png&TRANSPARENT=TRUE&CRS=EPSG:3857&WIDTH=256&HEIGHT=256&BBOX={bbox-epsg-3857}',
-];
+  `${WMTS}?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0` +
+  `&LAYER=GLOBAL_ANALYSISFORECAST_BGC_001_028/cmems_mod_glo_bgc-pft_anfc_0.25deg_P1D-m_202311/chl` +
+  `&TILEMATRIXSET=EPSG:3857&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}` +
+  `&FORMAT=image/png&STYLE=default`,
+]
 
 function updateDrawPreview(map: maplibregl.Map, points: [number, number][]) {
   const features: GeoJSON.Feature[] = [];
@@ -412,10 +416,11 @@ function LayerToggles({ sstUnavailable, planktonUnavailable, layerSST, layerPlan
   const layerCurrents = useFishStore(s => s.layerCurrents);
   return (
     <div style={{
-      position: 'absolute', bottom: 32, right: 8,
+      position: 'absolute', top: 8, right: 8,
       background: 'rgba(10,20,40,0.85)', border: '1px solid var(--ink-500)',
       borderRadius: 'var(--radius-sm)', padding: '8px 10px',
       fontFamily: 'var(--font-ui)', fontSize: 10, color: 'var(--text-mid)', minWidth: 130,
+      zIndex: 10,
     }}>
       <div style={{ fontWeight: 600, color: 'var(--text-hi)', marginBottom: 6, fontSize: 9, letterSpacing: '0.5px', textTransform: 'uppercase' }}>
         Data layers

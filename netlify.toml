@@ -1,0 +1,10 @@
+[build]
+  command = "npm run build"
+  publish = "dist"
+
+[[redirects]]
+  from = "/cmems-proxy/*"
+  to = "https://nrt.cmems-du.eu/:splat"
+  status = 200
+  force = true
+  headers = {Authorization = "Basic ${CMEMS_CREDENTIALS_B64}"}
