@@ -132,6 +132,10 @@ export function PacificMap({ phase }: Props) {
   const [sstUnavailable, setSstUnavailable]         = useState(false);
   const [planktonUnavailable, setPlanktonUnavailable] = useState(false);
 
+  // Layer opacity
+  const [opacitySST, setOpacitySST]           = useState(0.55);
+  const [opacityPlankton, setOpacityPlankton] = useState(0.6);
+
   // Store subscriptions
   const closures          = useFishStore(s => s.closures);
   const customClosureZone = useFishStore(s => s.customClosureZone);
@@ -261,7 +265,7 @@ export function PacificMap({ phase }: Props) {
     applyState(mapRef.current, closures, customClosureZone, isDecide, activeYear, mapLayer, scenario);
   }, [closures, customClosureZone, isDecide, activeYear, mapLayer, scenario]);
 
-  // ── Reactive: WMS visibility (TASK-01/03) ─────────────────────────────────
+  // ── Reactive: WMS visibility + opacity ───────────────────────────────────
   useEffect(() => {
     if (!readyRef.current || !mapRef.current) return;
     const map = mapRef.current;
@@ -272,6 +276,18 @@ export function PacificMap({ phase }: Props) {
       map.setLayoutProperty('plankton-layer', 'visibility', (layerPlankton && !isDecide) ? 'visible' : 'none');
     }
   }, [layerSST, layerPlankton, isDecide]);
+
+  useEffect(() => {
+    if (!readyRef.current || !mapRef.current) return;
+    if (mapRef.current.getLayer('sst-layer'))
+      mapRef.current.setPaintProperty('sst-layer', 'raster-opacity', opacitySST);
+  }, [opacitySST]);
+
+  useEffect(() => {
+    if (!readyRef.current || !mapRef.current) return;
+    if (mapRef.current.getLayer('plankton-layer'))
+      mapRef.current.setPaintProperty('plankton-layer', 'raster-opacity', opacityPlankton);
+  }, [opacityPlankton]);
 
   // ── Reactive: drawing zone (TASK-05) ─────────────────────────────────────
   useEffect(() => {
@@ -382,58 +398,107 @@ export function PacificMap({ phase }: Props) {
         </div>
       )}
 
-      {/* Layer toggles + legend (configure only) */}
+      {/* Layer panel: toggles + legend + opacity (configure only) */}
       {!isDecide && (
-        <>
-          <LayerToggles
-            sstUnavailable={sstUnavailable}
-            planktonUnavailable={planktonUnavailable}
-            layerSST={layerSST}
-            layerPlankton={layerPlankton}
-            onToggleSST={() => setLayerSST(!layerSST)}
-            onToggleCurrents={() => setLayerCurrents(!useFishStore.getState().layerCurrents)}
-            onTogglePlankton={() => setLayerPlankton(!layerPlankton)}
-          />
-          <MapLegend />
-        </>
+        <LayerToggles
+          sstUnavailable={sstUnavailable}
+          planktonUnavailable={planktonUnavailable}
+          layerSST={layerSST}
+          layerPlankton={layerPlankton}
+          opacitySST={opacitySST}
+          opacityPlankton={opacityPlankton}
+          onToggleSST={() => setLayerSST(!layerSST)}
+          onToggleCurrents={() => setLayerCurrents(!useFishStore.getState().layerCurrents)}
+          onTogglePlankton={() => setLayerPlankton(!layerPlankton)}
+          onOpacitySST={setOpacitySST}
+          onOpacityPlankton={setOpacityPlankton}
+        />
       )}
     </div>
   );
 }
 
-// ── Layer toggles (connected to store) ───────────────────────────────────────
+// ── Layer panel: toggles + legend + opacity ──────────────────────────────────
 interface LayerTogglesProps {
   sstUnavailable: boolean;
   planktonUnavailable: boolean;
   layerSST: boolean;
   layerPlankton: boolean;
+  opacitySST: number;
+  opacityPlankton: number;
   onToggleSST: () => void;
   onToggleCurrents: () => void;
   onTogglePlankton: () => void;
+  onOpacitySST: (v: number) => void;
+  onOpacityPlankton: (v: number) => void;
 }
 
-function LayerToggles({ sstUnavailable, planktonUnavailable, layerSST, layerPlankton, onToggleSST, onToggleCurrents, onTogglePlankton }: LayerTogglesProps) {
+function LayerToggles({
+  sstUnavailable, planktonUnavailable,
+  layerSST, layerPlankton,
+  opacitySST, opacityPlankton,
+  onToggleSST, onToggleCurrents, onTogglePlankton,
+  onOpacitySST, onOpacityPlankton,
+}: LayerTogglesProps) {
   const layerCurrents = useFishStore(s => s.layerCurrents);
   return (
     <div style={{
-      position: 'absolute', top: 8, right: 8,
-      background: 'rgba(10,20,40,0.85)', border: '1px solid var(--ink-500)',
+      position: 'absolute', bottom: 36, left: 8,
+      background: 'rgba(10,20,40,0.88)', border: '1px solid var(--ink-500)',
       borderRadius: 'var(--radius-sm)', padding: '8px 10px',
-      fontFamily: 'var(--font-ui)', fontSize: 10, color: 'var(--text-mid)', minWidth: 130,
+      fontFamily: 'var(--font-ui)', fontSize: 10, color: 'var(--text-mid)', minWidth: 148,
       zIndex: 10,
     }}>
       <div style={{ fontWeight: 600, color: 'var(--text-hi)', marginBottom: 6, fontSize: 9, letterSpacing: '0.5px', textTransform: 'uppercase' }}>
         Data layers
       </div>
-      <LayerToggleRow
-        label="SST" on={layerSST} unavailable={sstUnavailable} onToggle={onToggleSST}
+
+      {/* SST */}
+      <LayerToggleRow label="SST" on={layerSST} unavailable={sstUnavailable} onToggle={onToggleSST} />
+      {layerSST && !sstUnavailable && (
+        <div style={{ marginBottom: 6, marginTop: 2 }}>
+          <div style={{ height: 5, borderRadius: 3, marginBottom: 2, background: 'linear-gradient(to right, #2c7bb6, #abd9e9, #ffffbf, #fdae61, #d7191c)' }} />
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+            <span style={{ fontSize: 7, color: 'var(--text-lo)' }}>22°C</span>
+            <span style={{ fontSize: 7, color: 'var(--text-lo)' }}>32°C</span>
+          </div>
+          <OpacitySlider value={opacitySST} onChange={onOpacitySST} />
+        </div>
+      )}
+
+      {/* Currents */}
+      <LayerToggleRow label="Currents" on={layerCurrents} unavailable={false} onToggle={onToggleCurrents} />
+
+      {/* Plankton */}
+      <div style={{ marginTop: layerCurrents ? 0 : 0 }}>
+        <LayerToggleRow label="Plankton" on={layerPlankton} unavailable={planktonUnavailable} onToggle={onTogglePlankton} />
+        {layerPlankton && !planktonUnavailable && (
+          <div style={{ marginBottom: 2, marginTop: 2 }}>
+            <div style={{ height: 5, borderRadius: 3, marginBottom: 2, background: 'linear-gradient(to right, #440154, #31688e, #35b779, #fde725)' }} />
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+              <span style={{ fontSize: 7, color: 'var(--text-lo)' }}>0.01 mg/m³</span>
+              <span style={{ fontSize: 7, color: 'var(--text-lo)' }}>1.0</span>
+            </div>
+            <OpacitySlider value={opacityPlankton} onChange={onOpacityPlankton} />
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function OpacitySlider({ value, onChange }: { value: number; onChange: (v: number) => void }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+      <span style={{ fontSize: 7, color: 'var(--text-lo)', flexShrink: 0 }}>opacity</span>
+      <input
+        type="range" min={0} max={1} step={0.05} value={value}
+        onChange={e => onChange(Number(e.target.value))}
+        style={{ flex: 1, height: 3, cursor: 'pointer', accentColor: 'var(--signal-ok)' }}
       />
-      <LayerToggleRow
-        label="Currents" on={layerCurrents} unavailable={false} onToggle={onToggleCurrents}
-      />
-      <LayerToggleRow
-        label="Plankton" on={layerPlankton} unavailable={planktonUnavailable} onToggle={onTogglePlankton}
-      />
+      <span style={{ fontSize: 7, color: 'var(--text-lo)', width: 24, textAlign: 'right', flexShrink: 0 }}>
+        {Math.round(value * 100)}%
+      </span>
     </div>
   );
 }
