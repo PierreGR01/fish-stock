@@ -226,15 +226,15 @@ export function PacificMap({ phase }: Props) {
 
       // ── Raster data layers (added FIRST = bottom of z-stack, under all vector layers) ──
       try {
-        const { layerSST: initSST, isDecide: initDecide } = useFishStore.getState();
+        const { layerSST: initSST, phase: initPhase } = useFishStore.getState();
         map.addSource('sst-wms', { type: 'raster', tiles: SST_TILES, tileSize: 256 });
-        map.addLayer({ id: 'sst-layer', type: 'raster', source: 'sst-wms', layout: { visibility: (initSST && !initDecide) ? 'visible' : 'none' }, paint: { 'raster-opacity': 0.55 } });
+        map.addLayer({ id: 'sst-layer', type: 'raster', source: 'sst-wms', layout: { visibility: (initSST && initPhase !== 'decide') ? 'visible' : 'none' }, paint: { 'raster-opacity': 0.55 } });
       } catch { setSstUnavailable(true); }
 
       try {
-        const { layerPlankton: initPlankton, isDecide: initDecide2 } = useFishStore.getState();
+        const { layerPlankton: initPlankton, phase: initPhase2 } = useFishStore.getState();
         map.addSource('plankton-wms', { type: 'raster', tiles: PLANKTON_TILES, tileSize: 256 });
-        map.addLayer({ id: 'plankton-layer', type: 'raster', source: 'plankton-wms', layout: { visibility: (initPlankton && !initDecide2) ? 'visible' : 'none' }, paint: { 'raster-opacity': 0.6 } });
+        map.addLayer({ id: 'plankton-layer', type: 'raster', source: 'plankton-wms', layout: { visibility: (initPlankton && initPhase2 !== 'decide') ? 'visible' : 'none' }, paint: { 'raster-opacity': 0.6 } });
       } catch { setPlanktonUnavailable(true); }
 
       map.on('error', (e) => {
