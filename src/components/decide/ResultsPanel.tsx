@@ -44,6 +44,15 @@ const CHART_SERIES = [
 const PAD_L = 32;
 const PAD_R = 8;
 
+function xToYear(clientX: number, rect: DOMRect, dimsW: number): number {
+  const relX = clientX - rect.left;
+  const svgX = (relX / rect.width) * dimsW;
+  const chartW = dimsW - PAD_L - PAD_R;
+  const ratio = Math.max(0, Math.min(1, (svgX - PAD_L) / chartW));
+  const idx = Math.round(ratio * (YEARS.length - 1));
+  return YEARS[Math.max(0, Math.min(YEARS.length - 1, idx))];
+}
+
 function smoothPath(points: [number, number][]): string {
   if (points.length < 2) return '';
   let d = `M ${points[0][0]} ${points[0][1]}`;
@@ -81,6 +90,8 @@ function MultiSeriesChart({
 }: MultiSeriesChartProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [dims, setDims] = useState({ w: 600, h: 200 });
+  const setActiveYear = useFishStore(s => s.setActiveYear);
+  const isDragging = useRef(false);
 
   useEffect(() => {
     const el = containerRef.current;
@@ -133,10 +144,30 @@ function MultiSeriesChart({
   const cursorX = (_cursorXRaw != null && Number.isFinite(_cursorXRaw)) ? _cursorXRaw : null;
   const cursorY = (_cursorYRaw != null && Number.isFinite(_cursorYRaw)) ? _cursorYRaw : null;
 
+  const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    isDragging.current = true;
+    (e.currentTarget as HTMLDivElement).setPointerCapture(e.pointerId);
+    const rect = containerRef.current!.getBoundingClientRect();
+    setActiveYear(xToYear(e.clientX, rect, dims.w));
+  };
+  const handlePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!isDragging.current) return;
+    const rect = containerRef.current!.getBoundingClientRect();
+    setActiveYear(xToYear(e.clientX, rect, dims.w));
+  };
+  const handlePointerUp = () => { isDragging.current = false; };
+
   return (
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
       {/* Chart canvas — flex: 1 */}
-      <div ref={containerRef} style={{ flex: 1, minHeight: 0, position: 'relative', width: '100%' }}>
+      <div
+        ref={containerRef}
+        onPointerDown={handlePointerDown}
+        onPointerMove={handlePointerMove}
+        onPointerUp={handlePointerUp}
+        onPointerLeave={handlePointerUp}
+        style={{ flex: 1, minHeight: 0, position: 'relative', width: '100%', cursor: 'col-resize' }}
+      >
         <svg
           width="100%"
           height="100%"
@@ -281,6 +312,8 @@ export function ComparisonChart({ dataA, dataB, featured, activeYearIdx }: Compa
   const containerRef = useRef<HTMLDivElement>(null);
   const [dims, setDims] = useState({ w: 600, h: 200 });
   const comparisonScenarios = useFishStore(s => s.comparisonScenarios);
+  const setActiveYear = useFishStore(s => s.setActiveYear);
+  const isDragging = useRef(false);
 
   useEffect(() => {
     const el = containerRef.current;
@@ -314,7 +347,22 @@ export function ComparisonChart({ dataA, dataB, featured, activeYearIdx }: Compa
     yPct: (dims.h - ((tick - minV) / span) * (dims.h - 8) - 4) / dims.h * 100,
   }));
 
-  const cursorX = activeYearIdx !== undefined ? ptsA[activeYearIdx]?.[0] : null;
+  const cursorX = (activeYearIdx !== undefined && ptsA[activeYearIdx]?.[0] != null && Number.isFinite(ptsA[activeYearIdx]![0])) ? ptsA[activeYearIdx]![0] : null;
+  const cursorYA = (activeYearIdx !== undefined && ptsA[activeYearIdx]?.[1] != null && Number.isFinite(ptsA[activeYearIdx]![1])) ? ptsA[activeYearIdx]![1] : null;
+  const cursorYB = (activeYearIdx !== undefined && ptsB[activeYearIdx]?.[1] != null && Number.isFinite(ptsB[activeYearIdx]![1])) ? ptsB[activeYearIdx]![1] : null;
+
+  const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    isDragging.current = true;
+    (e.currentTarget as HTMLDivElement).setPointerCapture(e.pointerId);
+    const rect = containerRef.current!.getBoundingClientRect();
+    setActiveYear(xToYear(e.clientX, rect, dims.w));
+  };
+  const handlePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!isDragging.current) return;
+    const rect = containerRef.current!.getBoundingClientRect();
+    setActiveYear(xToYear(e.clientX, rect, dims.w));
+  };
+  const handlePointerUp = () => { isDragging.current = false; };
 
   // Delta vs 2026 at 2055 (index 45)
   const baseA = dataA[HISTORY_END + 1] ?? dataA[HISTORY_END];
@@ -331,7 +379,7 @@ export function ComparisonChart({ dataA, dataB, featured, activeYearIdx }: Compa
 
   // Visibility: show only selected scenarios
   const isVisible = (key: 'A' | 'B') => comparisonScenarios.includes(key);
-  const opacityFor = (key: 'A' | 'B') => isVisible(key) ? 1 : 0;
+  const opacityFor = (key: 'A' | 'B') => isVisible(key) ? 1 : 0.3;
   const strokeFor = (_key: 'A' | 'B') => 1.8;
 
   return (
@@ -345,7 +393,14 @@ export function ComparisonChart({ dataA, dataB, featured, activeYearIdx }: Compa
       </div>
 
       {/* Canvas */}
-      <div ref={containerRef} style={{ flex: 1, minHeight: 0, position: 'relative', width: '100%' }}>
+      <div
+        ref={containerRef}
+        onPointerDown={handlePointerDown}
+        onPointerMove={handlePointerMove}
+        onPointerUp={handlePointerUp}
+        onPointerLeave={handlePointerUp}
+        style={{ flex: 1, minHeight: 0, position: 'relative', width: '100%', cursor: 'col-resize' }}
+      >
         <svg width="100%" height="100%" viewBox={`0 0 ${dims.w} ${dims.h}`}
           preserveAspectRatio="none" style={{ display: 'block', position: 'absolute', inset: 0 }}>
 
@@ -383,6 +438,30 @@ export function ComparisonChart({ dataA, dataB, featured, activeYearIdx }: Compa
               stroke="rgba(255,255,255,0.4)" strokeWidth="0.8" vectorEffect="non-scaling-stroke" />
           )}
         </svg>
+
+        {/* Cursor circles */}
+        {cursorX !== null && cursorYA !== null && isVisible('A') && (
+          <div style={{
+            position: 'absolute',
+            left: `${cursorX / dims.w * 100}%`,
+            top: `${cursorYA / dims.h * 100}%`,
+            width: 7, height: 7, borderRadius: '50%',
+            background: SCENARIO_A_COLOR, opacity: 0.9,
+            transform: 'translate(-50%, -50%)',
+            pointerEvents: 'none',
+          }} />
+        )}
+        {cursorX !== null && cursorYB !== null && isVisible('B') && (
+          <div style={{
+            position: 'absolute',
+            left: `${cursorX / dims.w * 100}%`,
+            top: `${cursorYB / dims.h * 100}%`,
+            width: 7, height: 7, borderRadius: '50%',
+            background: SCENARIO_B_COLOR, opacity: 0.9,
+            transform: 'translate(-50%, -50%)',
+            pointerEvents: 'none',
+          }} />
+        )}
 
         {yTickItems.map((t, i) => (
           <div key={i} style={{
