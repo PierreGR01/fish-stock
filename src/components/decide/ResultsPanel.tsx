@@ -34,8 +34,8 @@ const CHART_SERIES = [
   { key: 'recruitment' as MapLayer, label: 'Recruitment', unit: 'index', color: 'var(--fish-c)' },
 ] as const;
 
-const PAD_L = 36;
-const PAD_R = 4;
+const PAD_L = 32;
+const PAD_R = 8;
 
 function smoothPath(points: [number, number][]): string {
   if (points.length < 2) return '';
@@ -49,13 +49,13 @@ function smoothPath(points: [number, number][]): string {
   return d;
 }
 
-function computePts(data: number[], h: number): [number, number][] {
+function computePts(data: number[], w: number, h: number): [number, number][] {
   const minV = Math.min(...data) * 0.9;
   const maxV = Math.max(...data) * 1.05;
   const span = maxV - minV || 1;
-  const totalW = 100 - PAD_L - PAD_R;
+  const chartW = w - PAD_L - PAD_R;
   return data.map((v, i) => [
-    PAD_L + (i / (data.length - 1)) * totalW,
+    PAD_L + (i / (data.length - 1)) * chartW,
     h - ((v - minV) / span) * (h - 8) - 4,
   ] as [number, number]);
 }
@@ -73,14 +73,16 @@ function MultiSeriesChart({
   featured, activeYearIdx,
 }: MultiSeriesChartProps) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const [chartHeight, setChartHeight] = useState(200);
+  const [dims, setDims] = useState({ w: 600, h: 200 });
 
   useEffect(() => {
     const el = containerRef.current;
     if (!el) return;
     const ro = new ResizeObserver(entries => {
-      const h = entries[0]?.contentRect.height;
-      if (h && h > 20) setChartHeight(h);
+      const rect = entries[0]?.contentRect;
+      if (rect && rect.width > 20 && rect.height > 20) {
+        setDims({ w: rect.width, h: rect.height });
+      }
     });
     ro.observe(el);
     return () => ro.disconnect();
@@ -93,47 +95,51 @@ function MultiSeriesChart({
   };
 
   const pointsMap = useMemo(() => ({
-    biomass:     computePts(biomassData,     chartHeight),
-    catch:       computePts(catchData,       chartHeight),
-    recruitment: computePts(recruitmentData, chartHeight),
-  }), [biomassData, catchData, recruitmentData, chartHeight]);
+    biomass:     computePts(biomassData,     dims.w, dims.h),
+    catch:       computePts(catchData,       dims.w, dims.h),
+    recruitment: computePts(recruitmentData, dims.w, dims.h),
+  }), [biomassData, catchData, recruitmentData, dims.w, dims.h]);
 
-  const featuredData = dataMap[featured];
-  const minV = Math.min(...featuredData) * 0.9;
-  const maxV = Math.max(...featuredData) * 1.05;
-  const span = maxV - minV || 1;
+  const featuredData = dataMap[featured] ?? [];
+  const minV = featuredData.length ? Math.min(...featuredData) * 0.9 : 0;
+  const maxV = featuredData.length ? Math.max(...featuredData) * 1.05 : 1;
+  const span = (maxV - minV) || 1;
 
   const yTicks = [maxV, (maxV * 0.5 + minV * 0.5), minV];
   const yTickItems = yTicks.map(tick => ({
     fmt: tick >= 10000 ? `${(tick / 1000).toFixed(0)}k` : tick.toFixed(1),
-    yPct: (chartHeight - ((tick - minV) / span) * (chartHeight - 8) - 4) / chartHeight * 100,
-    yPos: chartHeight - ((tick - minV) / span) * (chartHeight - 8) - 4,
+    yPct: (dims.h - ((tick - minV) / span) * (dims.h - 8) - 4) / dims.h * 100,
+    yPos: dims.h - ((tick - minV) / span) * (dims.h - 8) - 4,
   }));
 
   const baseVal  = featuredData[HISTORY_END + 1] ?? featuredData[HISTORY_END];
   const val2055  = featuredData[45];
   const deltaPct = baseVal > 0 ? ((val2055 - baseVal) / baseVal * 100) : 0;
-  const totalW   = 100 - PAD_L - PAD_R;
-  const annX     = PAD_L + (45 / (featuredData.length - 1)) * totalW;
+  const chartW   = dims.w - PAD_L - PAD_R;
+  const annX     = PAD_L + (45 / (featuredData.length - 1)) * chartW;
   const featPts  = pointsMap[featured];
   const annY     = featPts[45]?.[1] ?? 20;
   const annColor = deltaPct < 0 ? '#E5443A' : '#3AC58E';
 
-  const cursorX = activeYearIdx !== undefined ? featPts[activeYearIdx]?.[0] : null;
-  const cursorY = activeYearIdx !== undefined ? featPts[activeYearIdx]?.[1] : null;
+  const _cursorXRaw = activeYearIdx !== undefined ? featPts[activeYearIdx]?.[0] : null;
+  const _cursorYRaw = activeYearIdx !== undefined ? featPts[activeYearIdx]?.[1] : null;
+  const cursorX = (_cursorXRaw != null && Number.isFinite(_cursorXRaw)) ? _cursorXRaw : null;
+  const cursorY = (_cursorYRaw != null && Number.isFinite(_cursorYRaw)) ? _cursorYRaw : null;
 
   return (
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
       {/* Chart canvas — flex: 1 */}
-      <div ref={containerRef} style={{ flex: 1, minHeight: 0, position: 'relative' }}>
+      <div ref={containerRef} style={{ flex: 1, minHeight: 0, position: 'relative', width: '100%' }}>
         <svg
-          viewBox={`0 0 100 ${chartHeight}`}
+          width="100%"
+          height="100%"
+          viewBox={`0 0 ${dims.w} ${dims.h}`}
           preserveAspectRatio="none"
-          style={{ width: '100%', height: '100%', display: 'block', position: 'absolute', inset: 0 }}
+          style={{ display: 'block', position: 'absolute', inset: 0 }}
         >
           {/* Y axis */}
-          <line x1={PAD_L} y1={4} x2={PAD_L} y2={chartHeight - 2} stroke="rgba(255,255,255,0.12)" strokeWidth="0.5" vectorEffect="non-scaling-stroke" />
-          {yTickItems.map((t, i) => (
+          <line x1={PAD_L} y1={4} x2={PAD_L} y2={dims.h - 2} stroke="rgba(255,255,255,0.12)" strokeWidth="0.5" vectorEffect="non-scaling-stroke" />
+          {yTickItems.filter(t => Number.isFinite(t.yPos)).map((t, i) => (
             <line key={i} x1={PAD_L - 2} y1={t.yPos} x2={PAD_L} y2={t.yPos} stroke="rgba(255,255,255,0.2)" strokeWidth="0.5" vectorEffect="non-scaling-stroke" />
           ))}
 
@@ -152,7 +158,7 @@ function MultiSeriesChart({
               <g key={s.key} style={{ opacity: op, transition: 'opacity 0.2s ease' }}>
                 {isFeatured && projPts.length > 1 && (
                   <path
-                    d={`${projPath} L ${projPts[projPts.length - 1][0]} ${chartHeight} L ${projPts[0][0]} ${chartHeight} Z`}
+                    d={`${projPath} L ${projPts[projPts.length - 1][0]} ${dims.h} L ${projPts[0][0]} ${dims.h} Z`}
                     fill={s.color} fillOpacity="0.1"
                   />
                 )}
@@ -160,7 +166,7 @@ function MultiSeriesChart({
                 {isFeatured && histPts.length > 0 && (
                   <line
                     x1={histPts[histPts.length - 1][0]} y1={4}
-                    x2={histPts[histPts.length - 1][0]} y2={chartHeight - 2}
+                    x2={histPts[histPts.length - 1][0]} y2={dims.h - 2}
                     stroke="rgba(255,255,255,0.15)" strokeWidth="0.5" strokeDasharray="2,2" vectorEffect="non-scaling-stroke"
                   />
                 )}
@@ -173,13 +179,13 @@ function MultiSeriesChart({
           })}
 
           {/* Annotation stem */}
-          {Math.abs(deltaPct) > 1 && (
+          {Math.abs(deltaPct) > 1 && Number.isFinite(annY) && (
             <line x1={annX} y1={annY - 4} x2={annX} y2={annY - 10} stroke={annColor} strokeWidth="0.7" vectorEffect="non-scaling-stroke" />
           )}
 
           {/* Cursor line */}
           {cursorX !== null && (
-            <line x1={cursorX} y1={4} x2={cursorX} y2={chartHeight - 2} stroke="var(--ice)" strokeWidth="0.8" opacity="0.7" vectorEffect="non-scaling-stroke" />
+            <line x1={cursorX} y1={4} x2={cursorX} y2={dims.h - 2} stroke="var(--ice)" strokeWidth="0.8" opacity="0.7" vectorEffect="non-scaling-stroke" />
           )}
         </svg>
 
@@ -187,14 +193,15 @@ function MultiSeriesChart({
         {yTickItems.map((t, i) => (
           <div key={i} style={{
             position: 'absolute',
-            right: `${100 - (PAD_L - 3)}%`,
+            left: 0,
             top: `${t.yPct}%`,
             transform: 'translateY(-50%)',
+            width: PAD_L - 2,
             fontSize: 8, lineHeight: 1,
             color: 'rgba(255,255,255,0.45)',
             fontFamily: 'var(--font-mono)',
             whiteSpace: 'nowrap', pointerEvents: 'none',
-            textAlign: 'right', width: `${PAD_L - 5}%`,
+            textAlign: 'right',
           }}>{t.fmt}</div>
         ))}
 
@@ -202,8 +209,8 @@ function MultiSeriesChart({
         {Math.abs(deltaPct) > 1 && (
           <div style={{
             position: 'absolute',
-            left: `${annX}%`,
-            top: `${(annY - 14) / chartHeight * 100}%`,
+            left: `${annX / dims.w * 100}%`,
+            top: `${(annY - 14) / dims.h * 100}%`,
             transform: 'translateX(-50%)',
             fontSize: 9, fontWeight: 600, color: annColor,
             fontFamily: 'var(--font-ui)',
@@ -218,8 +225,8 @@ function MultiSeriesChart({
         {cursorX !== null && cursorY !== null && (
           <div style={{
             position: 'absolute',
-            left: `${cursorX}%`,
-            top: `${(cursorY / chartHeight) * 100}%`,
+            left: `${cursorX / dims.w * 100}%`,
+            top: `${(cursorY / dims.h) * 100}%`,
             width: 7, height: 7, borderRadius: '50%',
             background: 'var(--ice)', opacity: 0.9,
             transform: 'translate(-50%, -50%)',
@@ -258,6 +265,8 @@ export function ResultsPanel({ scenario = 'A', compact = false }: Props) {
   const activeIdx     = useMemo(() => YEARS.indexOf(activeYear), [activeYear]);
 
   const [sizeExpanded, setSizeExpanded] = useState(false);
+  const [sizeHover, setSizeHover] = useState(false);
+  const [exportHover, setExportHover] = useState(false);
 
   const biomass     = scenario === 'A' ? BIOMASS_A     : BIOMASS_B;
   const catch_data  = scenario === 'A' ? CATCH_A       : CATCH_B;
@@ -334,37 +343,43 @@ export function ResultsPanel({ scenario = 'A', compact = false }: Props) {
       {/* Bottom row — Size distribution + Export PDF */}
       {!compact && (
         <div style={{
-          flexShrink: 0, display: 'flex', gap: 6,
-          padding: '6px 14px 8px',
+          flexShrink: 0, display: 'flex', gap: 8,
+          padding: '8px 12px',
           borderTop: '1px solid var(--ink-500)',
         }}>
           <button
             onClick={() => setSizeExpanded(v => !v)}
+            onMouseEnter={() => setSizeHover(true)}
+            onMouseLeave={() => setSizeHover(false)}
             style={{
               display: 'flex', alignItems: 'center', gap: 6,
-              padding: '6px 10px',
-              background: 'transparent', border: '1px solid var(--ink-400)',
+              padding: '5px 12px',
+              background: sizeHover ? 'var(--ink-500)' : 'rgba(255,255,255,0.04)',
+              border: '1px solid var(--ink-400)',
               borderRadius: 'var(--radius-sm)', cursor: 'pointer',
-              fontFamily: 'var(--font-ui)', fontSize: 9, color: 'var(--text-lo)',
+              fontFamily: 'var(--font-ui)', fontSize: 10, color: 'var(--text-mid)',
+              transition: 'background 0.15s ease',
             }}
           >
-            <span>{sizeExpanded ? '↙' : '↗'}</span>
-            <span>Size distribution</span>
-            <span style={{ marginLeft: 4, color: 'var(--text-lo)' }}>period: {activeYear}</span>
+            {sizeExpanded ? '✕ Close size distribution' : '↗ Size distribution'}
           </button>
 
           <button
             onClick={handlePDF}
+            onMouseEnter={() => setExportHover(true)}
+            onMouseLeave={() => setExportHover(false)}
             style={{
               display: 'flex', alignItems: 'center', gap: 5,
-              padding: '6px 10px',
-              background: 'transparent', border: '1px solid var(--ink-400)',
+              padding: '5px 12px',
+              background: exportHover ? 'var(--ink-500)' : 'rgba(255,255,255,0.04)',
+              border: '1px solid var(--ink-400)',
               borderRadius: 'var(--radius-sm)', cursor: 'pointer',
-              fontFamily: 'var(--font-ui)', fontSize: 9, color: 'var(--text-lo)',
+              fontFamily: 'var(--font-ui)', fontSize: 10, color: 'var(--text-mid)',
+              marginLeft: 'auto',
+              transition: 'background 0.15s ease',
             }}
           >
-            <span>⎙</span>
-            <span>Export PDF</span>
+            ⎙ Export PDF
           </button>
         </div>
       )}

@@ -59,7 +59,7 @@ function BannerKPI({ label, value, unit, delta, critYear }: {
     : 'var(--text-lo)';
 
   return (
-    <div style={{ padding: '0 14px', flexShrink: 0, display: 'flex', flexDirection: 'column', justifyContent: 'flex-start', alignSelf: 'stretch' }}>
+    <div style={{ padding: '0 14px', flexShrink: 0, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
       <div style={{ fontFamily: 'var(--font-ui)', fontSize: 8, textTransform: 'uppercase', letterSpacing: '0.4px', color: 'var(--text-lo)', marginBottom: 2 }}>
         {label}
       </div>
@@ -103,15 +103,15 @@ function SingleBanner() {
 
   return (
     <div style={{
-      display: 'flex', alignItems: 'center', gap: 0,
-      padding: '8px 16px', background: 'var(--ink-700)',
+      display: 'flex', alignItems: 'stretch',
+      background: 'var(--ink-700)',
       borderBottom: '1px solid var(--ink-500)', flexShrink: 0,
+      overflow: 'hidden',
     }}>
 
-      {/* LEFT — back button + key parameters + save */}
-      <div className="print-hide" style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+      {/* LEFT 50% — scenario */}
+      <div className="print-hide" style={{ flex: '0 0 50%', display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', overflow: 'hidden', minWidth: 0 }}>
 
-        {/* Back button */}
         <button
           onClick={() => setPhase('configure')}
           style={{
@@ -123,11 +123,9 @@ function SingleBanner() {
           ← Back to configure
         </button>
 
-        {/* Key parameters groups */}
-        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
+        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, overflow: 'hidden', minWidth: 0 }}>
 
-          {/* CATCH */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 3, flexShrink: 0 }}>
             <GroupLabel>Catch</GroupLabel>
             <Chip><b>A West</b> · {fmtNum(catchA)} t · {modeAbbr(catchAMode)}</Chip>
             <Chip>
@@ -138,8 +136,7 @@ function SingleBanner() {
             <Chip><b>C East</b> · {fmtNum(catchC)} t · {modeAbbr(catchCMode)}</Chip>
           </div>
 
-          {/* CLOSURES */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 3, flexShrink: 0 }}>
             <GroupLabel>Closures</GroupLabel>
             {closures.length === 0 ? (
               <Chip dimmed>No closures</Chip>
@@ -148,40 +145,33 @@ function SingleBanner() {
             )}
           </div>
 
-          {/* CLIMATE */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 3, flexShrink: 0 }}>
             <GroupLabel>Climate</GroupLabel>
             <Chip>IPCC {capitalize(climateScenario)} · {climateModels.join(', ')}</Chip>
           </div>
 
-          {/* CONCENTRATION */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 3, flexShrink: 0 }}>
             <GroupLabel>Concentration</GroupLabel>
             <Chip>{capitalize(catchConcentration)}</Chip>
           </div>
         </div>
 
-        {/* Save button */}
         <button
           onClick={() => setShowSaveModal(true)}
           style={{
-            padding: '4px 8px', fontSize: 9, fontFamily: 'var(--font-ui)',
+            padding: '4px 10px', fontSize: 10, fontFamily: 'var(--font-ui)',
             background: 'var(--ink-500)', border: '1px solid var(--ink-400)',
-            borderRadius: 'var(--radius-sm)', color: 'var(--text-lo)', cursor: 'pointer',
-            flexShrink: 0,
+            borderRadius: 'var(--radius-sm)', color: 'var(--text-mid)', cursor: 'pointer',
+            flexShrink: 0, marginLeft: 'auto',
           }}>
-          ⤓ Save
+          ⤓ Save this scenario
         </button>
       </div>
 
-      {/* SEPARATOR */}
-      <div style={{ width: 1, alignSelf: 'stretch', background: 'var(--ink-500)', margin: '0 12px', flexShrink: 0 }} />
+      {/* RIGHT 50% — results */}
+      <div style={{ flex: '0 0 50%', display: 'flex', alignItems: 'center', gap: 0, borderLeft: '1px solid var(--ink-500)', overflow: 'hidden', minWidth: 0 }}>
 
-      {/* CENTER — verdict + KPIs + Compare */}
-      <div style={{ display: 'flex', alignItems: 'flex-start', flex: 1, minWidth: 0, padding: '2px 0' }}>
-
-        {/* Verdict */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0, padding: '0 16px' }}>
           <VerdictArrow trend={VERDICT_A.trend as 'up' | 'down'} />
           <div>
             <div style={{ fontFamily: 'var(--font-ui)', fontSize: 13, fontWeight: 600, color: verdictColor }}>{VERDICT_A.text}</div>
@@ -190,25 +180,23 @@ function SingleBanner() {
         </div>
 
         <KPISeparator />
-
         <BannerKPI label="Biomass 2055" value={kpis?.v2055} unit="t/km²" delta={kpis?.d2055} />
         <KPISeparator />
         <BannerKPI label="Biomass 2099" value={kpis?.v2099} unit="t/km²" delta={kpis?.d2099} />
         <KPISeparator />
         <BannerKPI label="Critical year" critYear={kpis !== null ? kpis?.critYear : undefined} />
 
-        {/* Compare button — pushed to right */}
-        <div className="print-hide" style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', paddingLeft: 12, flexShrink: 0 }}>
-          <button
-            onClick={() => setComparisonMode(true)}
-            style={{
-              padding: '4px 12px', fontSize: 10, fontFamily: 'var(--font-ui)',
-              background: 'var(--ice-dim)', border: '1px solid var(--ice-border)',
-              borderRadius: 'var(--radius-sm)', color: 'var(--ice)', cursor: 'pointer', fontWeight: 600,
-            }}>
-            ⇄ Compare
-          </button>
-        </div>
+        <button
+          className="print-hide"
+          onClick={() => setComparisonMode(true)}
+          style={{
+            marginLeft: 'auto', marginRight: 12, flexShrink: 0,
+            padding: '4px 12px', fontSize: 10, fontFamily: 'var(--font-ui)',
+            background: 'var(--ice-dim)', border: '1px solid var(--ice-border)',
+            borderRadius: 'var(--radius-sm)', color: 'var(--ice)', cursor: 'pointer', fontWeight: 600,
+          }}>
+          ⇄ Compare
+        </button>
       </div>
 
       {showSaveModal && <SaveScenarioModal onClose={() => setShowSaveModal(false)} />}
@@ -300,14 +288,14 @@ function UnifiedToggle() {
 
   return (
     <div className="print-hide" style={{
-      height: 36, display: 'flex', alignItems: 'center', gap: 8,
-      padding: '0 14px',
+      height: 40, position: 'relative', display: 'flex', alignItems: 'center',
+      padding: '0 16px',
       background: 'rgba(10,20,40,0.9)',
       borderBottom: '1px solid var(--ink-500)', flexShrink: 0,
     }}>
 
       {/* Left — zone indicator */}
-      <div style={{ marginRight: 'auto', display: 'flex', alignItems: 'center', gap: 6, fontFamily: 'var(--font-ui)', fontSize: 9 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontFamily: 'var(--font-ui)', fontSize: 9, flexShrink: 0 }}>
         {selectedZone ? (
           <>
             <span style={{ color: ZONE_COLORS[selectedZone], fontSize: 12 }}>◉</span>
@@ -326,23 +314,22 @@ function UnifiedToggle() {
         )}
       </div>
 
-      {/* Center — scenario selector (comparison mode only) */}
-      {comparisonMode && (
-        <div style={{ display: 'flex', border: '1px solid var(--ice-border)', borderRadius: 'var(--radius-sm)', overflow: 'hidden' }}>
-          {(['A', 'B'] as const).map(s => (
-            <button key={s} onClick={() => setMapScenario(s)} style={{
-              padding: '3px 12px', fontSize: 10, fontFamily: 'var(--font-ui)',
-              background: mapScenario === s ? 'var(--ice-dim)' : 'transparent',
-              border: 'none', borderRight: s === 'A' ? '1px solid var(--ice-border)' : 'none',
-              color: mapScenario === s ? 'var(--ice)' : 'var(--text-lo)',
-              cursor: 'pointer', fontWeight: mapScenario === s ? 600 : 400,
-            }}>Scenario {s}</button>
-          ))}
-        </div>
-      )}
+      {/* Absolutely centered — scenario selector (comparison) + layer toggle */}
+      <div style={{ position: 'absolute', left: '50%', transform: 'translateX(-50%)', display: 'flex', alignItems: 'center', gap: 6 }}>
+        {comparisonMode && (
+          <div style={{ display: 'flex', border: '1px solid var(--ice-border)', borderRadius: 'var(--radius-sm)', overflow: 'hidden', marginRight: 8 }}>
+            {(['A', 'B'] as const).map(s => (
+              <button key={s} onClick={() => setMapScenario(s)} style={{
+                padding: '3px 12px', fontSize: 10, fontFamily: 'var(--font-ui)',
+                background: mapScenario === s ? 'var(--ice-dim)' : 'transparent',
+                border: 'none', borderRight: s === 'A' ? '1px solid var(--ice-border)' : 'none',
+                color: mapScenario === s ? 'var(--ice)' : 'var(--text-lo)',
+                cursor: 'pointer', fontWeight: mapScenario === s ? 600 : 400,
+              }}>Scenario {s}</button>
+            ))}
+          </div>
+        )}
 
-      {/* Center — layer / series toggle */}
-      <div style={{ display: 'flex', gap: 4 }}>
         {TOGGLE_SERIES.map(s => {
           const isActive = mapLayer === s.key;
           return (
@@ -351,7 +338,7 @@ function UnifiedToggle() {
               onClick={() => handleToggle(s.key)}
               style={{
                 display: 'flex', alignItems: 'center', gap: 5,
-                padding: '3px 10px',
+                padding: '5px 14px',
                 background: isActive ? 'var(--ink-500)' : 'transparent',
                 border: isActive ? `1px solid ${s.color}` : '1px solid var(--ink-400)',
                 borderRadius: 'var(--radius-sm)',
@@ -360,12 +347,12 @@ function UnifiedToggle() {
             >
               <div style={{
                 width: 7, height: 7, borderRadius: '50%',
-                background: s.color, opacity: isActive ? 1 : 0.3, flexShrink: 0,
+                background: s.color, opacity: isActive ? 1 : 0.6, flexShrink: 0,
               }} />
               <span style={{
                 fontFamily: 'var(--font-ui)', fontSize: 10,
                 fontWeight: isActive ? 600 : 400,
-                color: isActive ? 'var(--text-hi)' : 'var(--text-lo)',
+                color: isActive ? 'var(--text-hi)' : 'var(--text-mid)',
               }}>{s.label}</span>
               {isActive && (
                 <span style={{ fontFamily: 'var(--font-ui)', fontSize: 9, color: 'var(--text-lo)' }}>
