@@ -28,10 +28,17 @@ export function calcKPIs(biomass: number[]) {
 
 // ── Multi-series chart ────────────────────────────────────────────────────
 
+// Hex values required for SVG gradient stops (CSS vars can't be used there)
+const METRIC_HEX: Record<MapLayer, string> = {
+  biomass:     '#2DD4BF',
+  catch:       '#84CC16',
+  recruitment: '#EAB308',
+};
+
 const CHART_SERIES = [
-  { key: 'biomass'     as MapLayer, label: 'Biomass',     unit: 't/km²', color: 'var(--fish-a)' },
-  { key: 'catch'       as MapLayer, label: 'Catch',       unit: 't/yr',  color: 'var(--fish-b)' },
-  { key: 'recruitment' as MapLayer, label: 'Recruitment', unit: 'index', color: 'var(--fish-c)' },
+  { key: 'biomass'     as MapLayer, label: 'Biomass',     unit: 't/km²', color: 'var(--metric-biomass)' },
+  { key: 'catch'       as MapLayer, label: 'Catch',       unit: 't/yr',  color: 'var(--metric-catch)' },
+  { key: 'recruitment' as MapLayer, label: 'Recruitment', unit: 'index', color: 'var(--metric-recruitment)' },
 ] as const;
 
 const PAD_L = 32;
@@ -119,7 +126,7 @@ function MultiSeriesChart({
   const annX     = PAD_L + (45 / (featuredData.length - 1)) * chartW;
   const featPts  = pointsMap[featured];
   const annY     = featPts[45]?.[1] ?? 20;
-  const annColor = deltaPct < 0 ? '#E5443A' : '#3AC58E';
+  const annColor = deltaPct < 0 ? '#E5443A' : '#22C55E';
 
   const _cursorXRaw = activeYearIdx !== undefined ? featPts[activeYearIdx]?.[0] : null;
   const _cursorYRaw = activeYearIdx !== undefined ? featPts[activeYearIdx]?.[1] : null;
@@ -137,6 +144,13 @@ function MultiSeriesChart({
           preserveAspectRatio="none"
           style={{ display: 'block', position: 'absolute', inset: 0 }}
         >
+          <defs>
+            <linearGradient id={`area-grad-${featured}`} x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%"   stopColor={METRIC_HEX[featured]} stopOpacity="0.30" />
+              <stop offset="100%" stopColor="#0D1E3A"               stopOpacity="0.02" />
+            </linearGradient>
+          </defs>
+
           {/* Y axis */}
           <line x1={PAD_L} y1={4} x2={PAD_L} y2={dims.h - 2} stroke="rgba(255,255,255,0.12)" strokeWidth="0.5" vectorEffect="non-scaling-stroke" />
           {yTickItems.filter(t => Number.isFinite(t.yPos)).map((t, i) => (
@@ -151,15 +165,16 @@ function MultiSeriesChart({
             const projPts = pts.slice(HISTORY_END);
             const histPath = smoothPath(histPts);
             const projPath = smoothPath(projPts);
+            const allPath = smoothPath(pts);
             const sw = isFeatured ? 2 : 1;
             const op = isFeatured ? 1 : 0.18;
 
             return (
               <g key={s.key} style={{ opacity: op, transition: 'opacity 0.2s ease' }}>
-                {isFeatured && projPts.length > 1 && (
+                {isFeatured && pts.length > 1 && (
                   <path
-                    d={`${projPath} L ${projPts[projPts.length - 1][0]} ${dims.h} L ${projPts[0][0]} ${dims.h} Z`}
-                    fill={s.color} fillOpacity="0.1"
+                    d={`${allPath} L ${pts[pts.length - 1][0]} ${dims.h} L ${pts[0][0]} ${dims.h} Z`}
+                    fill={`url(#area-grad-${featured})`}
                   />
                 )}
                 {histPath && <path d={histPath} fill="none" stroke={s.color} strokeWidth={sw} vectorEffect="non-scaling-stroke" />}
@@ -250,6 +265,175 @@ function MultiSeriesChart({
   );
 }
 
+// ── ComparisonChart ───────────────────────────────────────────────────────
+
+const SCENARIO_A_COLOR = 'var(--scenario-a)';
+const SCENARIO_B_COLOR = 'var(--scenario-b)';
+
+interface ComparisonChartProps {
+  dataA: number[];
+  dataB: number[];
+  featured: MapLayer;
+  activeYearIdx?: number;
+}
+
+export function ComparisonChart({ dataA, dataB, featured, activeYearIdx }: ComparisonChartProps) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [dims, setDims] = useState({ w: 600, h: 200 });
+  const comparisonScenarios = useFishStore(s => s.comparisonScenarios);
+
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(entries => {
+      const rect = entries[0]?.contentRect;
+      if (rect && rect.width > 20 && rect.height > 20)
+        setDims({ w: rect.width, h: rect.height });
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
+  const { ptsA, ptsB, minV, maxV, span } = useMemo(() => {
+    const all = [...dataA, ...dataB];
+    const minV = Math.min(...all) * 0.9;
+    const maxV = Math.max(...all) * 1.05;
+    const span = (maxV - minV) || 1;
+    const chartW = dims.w - PAD_L - PAD_R;
+    const pts = (data: number[]) => data.map((v, i) => [
+      PAD_L + (i / (data.length - 1)) * chartW,
+      dims.h - ((v - minV) / span) * (dims.h - 8) - 4,
+    ] as [number, number]);
+    return { ptsA: pts(dataA), ptsB: pts(dataB), minV, maxV, span };
+  }, [dataA, dataB, dims.w, dims.h]);
+
+  const yTicks = [maxV, (maxV * 0.5 + minV * 0.5), minV];
+  const yTickItems = yTicks.map(tick => ({
+    fmt: tick >= 10000 ? `${(tick / 1000).toFixed(0)}k` : tick.toFixed(1),
+    yPos: dims.h - ((tick - minV) / span) * (dims.h - 8) - 4,
+    yPct: (dims.h - ((tick - minV) / span) * (dims.h - 8) - 4) / dims.h * 100,
+  }));
+
+  const cursorX = activeYearIdx !== undefined ? ptsA[activeYearIdx]?.[0] : null;
+
+  // Delta vs 2026 at 2055 (index 45)
+  const baseA = dataA[HISTORY_END + 1] ?? dataA[HISTORY_END];
+  const baseB = dataB[HISTORY_END + 1] ?? dataB[HISTORY_END];
+  const deltaA = baseA > 0 ? ((dataA[45] - baseA) / baseA * 100) : 0;
+  const deltaB = baseB > 0 ? ((dataB[45] - baseB) / baseB * 100) : 0;
+
+  const metricUnit = { biomass: 't/km²', catch: 't/yr', recruitment: 'index' }[featured];
+
+  const seriesDef = [
+    { key: 'A' as const, pts: ptsA, color: SCENARIO_A_COLOR, delta: deltaA },
+    { key: 'B' as const, pts: ptsB, color: SCENARIO_B_COLOR, delta: deltaB },
+  ];
+
+  // Visibility: show only selected scenarios
+  const isVisible = (key: 'A' | 'B') => comparisonScenarios.includes(key);
+  const opacityFor = (key: 'A' | 'B') => isVisible(key) ? 1 : 0;
+  const strokeFor = (_key: 'A' | 'B') => 1.8;
+
+  return (
+    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+
+      {/* Chart header */}
+      <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
+        <span style={{ fontFamily: 'var(--font-ui)', fontSize: 8, textTransform: 'uppercase', letterSpacing: '0.4px', color: 'var(--text-lo)' }}>
+          {featured} — {metricUnit}
+        </span>
+      </div>
+
+      {/* Canvas */}
+      <div ref={containerRef} style={{ flex: 1, minHeight: 0, position: 'relative', width: '100%' }}>
+        <svg width="100%" height="100%" viewBox={`0 0 ${dims.w} ${dims.h}`}
+          preserveAspectRatio="none" style={{ display: 'block', position: 'absolute', inset: 0 }}>
+
+          <line x1={PAD_L} y1={4} x2={PAD_L} y2={dims.h - 2} stroke="rgba(255,255,255,0.12)" strokeWidth="0.5" vectorEffect="non-scaling-stroke" />
+          {yTickItems.filter(t => Number.isFinite(t.yPos)).map((t, i) => (
+            <line key={i} x1={PAD_L - 2} y1={t.yPos} x2={PAD_L} y2={t.yPos} stroke="rgba(255,255,255,0.2)" strokeWidth="0.5" vectorEffect="non-scaling-stroke" />
+          ))}
+
+          {ptsA[HISTORY_END] && (
+            <line x1={ptsA[HISTORY_END][0]} y1={4} x2={ptsA[HISTORY_END][0]} y2={dims.h - 2}
+              stroke="rgba(255,255,255,0.15)" strokeWidth="0.5" strokeDasharray="2,2" vectorEffect="non-scaling-stroke" />
+          )}
+
+          {seriesDef.map(({ key, pts, color }) => {
+            const histPts = pts.slice(0, HISTORY_END + 1);
+            const projPts = pts.slice(HISTORY_END);
+            const histPath = smoothPath(histPts);
+            const projPath = smoothPath(projPts);
+            const op = opacityFor(key);
+            const sw = strokeFor(key);
+            return (
+              <g key={key} style={{ opacity: op, transition: 'opacity 0.2s ease' }}>
+                {projPts.length > 1 && (
+                  <path d={`${projPath} L ${projPts[projPts.length - 1][0]} ${dims.h} L ${projPts[0][0]} ${dims.h} Z`}
+                    fill={color} fillOpacity="0.08" />
+                )}
+                {histPath && <path d={histPath} fill="none" stroke={color} strokeWidth={sw} vectorEffect="non-scaling-stroke" />}
+                {projPath && <path d={projPath} fill="none" stroke={color} strokeWidth={sw} strokeDasharray="4,3" opacity="0.75" vectorEffect="non-scaling-stroke" />}
+              </g>
+            );
+          })}
+
+          {cursorX != null && Number.isFinite(cursorX) && (
+            <line x1={cursorX} y1={4} x2={cursorX} y2={dims.h - 2}
+              stroke="rgba(255,255,255,0.4)" strokeWidth="0.8" vectorEffect="non-scaling-stroke" />
+          )}
+        </svg>
+
+        {yTickItems.map((t, i) => (
+          <div key={i} style={{
+            position: 'absolute', left: 0, top: `${t.yPct}%`, transform: 'translateY(-50%)',
+            width: PAD_L - 2, fontSize: 8, lineHeight: 1,
+            color: 'rgba(255,255,255,0.45)', fontFamily: 'var(--font-mono)',
+            whiteSpace: 'nowrap', pointerEvents: 'none', textAlign: 'right',
+          }}>{t.fmt}</div>
+        ))}
+      </div>
+
+      {/* Consolidated legend — scenario + delta + history/projection */}
+      <div style={{ flexShrink: 0, display: 'flex', gap: 6, padding: '5px 0 2px', alignItems: 'center', flexWrap: 'wrap' }}>
+        {seriesDef.map(({ key, color, delta }) => {
+          const visible = isVisible(key);
+          return (
+            <div key={key} style={{
+              display: 'flex', alignItems: 'center', gap: 5,
+              padding: '3px 8px 3px 5px',
+              background: visible ? `color-mix(in srgb, ${color} 12%, transparent)` : 'rgba(255,255,255,0.03)',
+              border: `1px solid ${visible ? `color-mix(in srgb, ${color} 50%, transparent)` : 'rgba(255,255,255,0.08)'}`,
+              borderRadius: 3,
+              opacity: visible ? 1 : 0.38,
+              transition: 'opacity 0.2s ease, border-color 0.2s ease',
+            }}>
+              <svg width="18" height="6" style={{ flexShrink: 0 }}>
+                <line x1="0" y1="3" x2="18" y2="3" stroke={color} strokeWidth="2" />
+              </svg>
+              <span style={{ fontFamily: 'var(--font-ui)', fontSize: 9, color, fontWeight: 600 }}>Sc. {key}</span>
+              <span style={{ fontFamily: 'var(--font-mono)', fontSize: 8, color: delta < 0 ? 'var(--signal-danger)' : 'var(--signal-ok)', marginLeft: 2 }}>
+                {delta > 0 ? '+' : ''}{delta.toFixed(0)}% / 2055
+              </span>
+            </div>
+          );
+        })}
+
+        <div style={{ marginLeft: 'auto', display: 'flex', gap: 8, alignItems: 'center' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
+            <svg width="14" height="4"><line x1="0" y1="2" x2="14" y2="2" stroke="rgba(255,255,255,0.35)" strokeWidth="1.5" /></svg>
+            <span style={{ fontFamily: 'var(--font-ui)', fontSize: 7, color: 'var(--text-lo)' }}>history</span>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
+            <svg width="14" height="4"><line x1="0" y1="2" x2="14" y2="2" stroke="rgba(255,255,255,0.35)" strokeWidth="1.5" strokeDasharray="3,2" /></svg>
+            <span style={{ fontFamily: 'var(--font-ui)', fontSize: 7, color: 'var(--text-lo)' }}>projection</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── ResultsPanel ──────────────────────────────────────────────────────────
 
 interface Props {
@@ -295,7 +479,7 @@ export function ResultsPanel({ scenario = 'A', compact = false }: Props) {
       <div style={{ flex: 1, minHeight: 0, padding: compact ? '8px 10px 4px' : '10px 14px 4px', display: 'flex', flexDirection: 'column' }}>
         {compact ? (
           <LineChart
-            data={biomass} height={44} color="var(--fish-a)"
+            data={biomass} height={44} color="var(--metric-biomass)"
             activeYearIdx={activeIdx >= 0 ? activeIdx : undefined}
             unit="t/km²"
           />

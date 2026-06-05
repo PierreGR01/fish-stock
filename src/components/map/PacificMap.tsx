@@ -13,7 +13,7 @@ const FISHERY_FEATURES: GeoJSON.Feature[] = [
   {
     // WCPFC western area: 130°E → 180°, tropical band, following Micronesia/Melanesia coastlines
     type: 'Feature',
-    properties: { id: 'A', name: 'A · West Pacific', color: '#4DA8DA', opacity: 0.18 },
+    properties: { id: 'A', name: 'A · West Pacific', color: '#A8D4EE', opacity: 0.22 },
     geometry: {
       type: 'Polygon',
       coordinates: [[
@@ -35,7 +35,7 @@ const FISHERY_FEATURES: GeoJSON.Feature[] = [
   {
     // WCPFC/IATTC overlap zone: dateline → 130°W, central equatorial Pacific
     type: 'Feature',
-    properties: { id: 'B', name: 'B · Central', color: '#3AC58E', opacity: 0.18 },
+    properties: { id: 'B', name: 'B · Central', color: '#6ABADE', opacity: 0.20 },
     geometry: {
       type: 'Polygon',
       coordinates: [[
@@ -54,7 +54,7 @@ const FISHERY_FEATURES: GeoJSON.Feature[] = [
   {
     // IATTC eastern tropical Pacific: 130°W → 78°W, following continental shelf geometry
     type: 'Feature',
-    properties: { id: 'C', name: 'C · East tropical', color: '#F2A93B', opacity: 0.18 },
+    properties: { id: 'C', name: 'C · East tropical', color: '#3A98C8', opacity: 0.18 },
     geometry: {
       type: 'Polygon',
       coordinates: [[
@@ -83,11 +83,11 @@ interface EezZone {
 const EEZ_ZONES = eezZonesRaw as unknown as EezZone[];
 
 // ── Choropleth palette ────────────────────────────────────────────────────
-// min (#1a3a5c) → layer-specific max color
+// min (#1a3a5c) → layer-specific max color (mirrors --metric-* tokens)
 const LAYER_MAX_RGB: Record<MapLayer, [number, number, number]> = {
-  biomass:     [58,  197, 142],  // #3ac58e
-  catch:       [229,  68,  58],  // #e5443a
-  recruitment: [245, 166,  35],  // #f5a623
+  biomass:     [ 45, 212, 191],  // #2DD4BF — teal
+  catch:       [132, 204,  22],  // #84CC16 — lime
+  recruitment: [234, 179,   8],  // #EAB308 — golden amber
 };
 const MIN_RGB: [number, number, number] = [26, 58, 92]; // #1a3a5c
 
@@ -127,9 +127,9 @@ function heatColor(zoneId: string, year: number, layer: MapLayer, scenario: 'A' 
 
 // ── Legend metadata ───────────────────────────────────────────────────────
 const LAYER_MAX_HEX: Record<MapLayer, string> = {
-  biomass:     '#3ac58e',
-  catch:       '#e5443a',
-  recruitment: '#f5a623',
+  biomass:     '#2DD4BF',
+  catch:       '#84CC16',
+  recruitment: '#EAB308',
 };
 const LEGEND_INFO: Record<MapLayer, { label: string; min: string; max: string }> = {
   biomass:     { label: 'Biomass · t/km²',  min: '40',  max: '140' },
@@ -216,7 +216,7 @@ export function PacificMap({ phase }: Props) {
   const setLayerCurrents     = useFishStore(s => s.setLayerCurrents);
   const setLayerPlankton     = useFishStore(s => s.setLayerPlankton);
 
-  const scenario: 'A' | 'B' = phase === 'decide' && compMode ? mapScenario : 'A';
+  const scenario: 'A' | 'B' = phase === 'decide' && compMode ? (mapScenario ?? 'A') : 'A';
   const isDecide = phase === 'decide';
 
   drawingZoneRef.current = drawingZone;
@@ -348,9 +348,9 @@ export function PacificMap({ phase }: Props) {
 
       // ── Zone labels ───────────────────────────────────────────────────────
       map.addSource('fishery-labels', { type: 'geojson', data: { type: 'FeatureCollection', features: [
-        { type: 'Feature', properties: { label: 'A · West Pacific', color: '#4DA8DA' }, geometry: { type: 'Point', coordinates: [155, 3] } },
-        { type: 'Feature', properties: { label: 'B · Central', color: '#3AC58E' }, geometry: { type: 'Point', coordinates: [-155, 3] } },
-        { type: 'Feature', properties: { label: 'C · East tropical', color: '#F2A93B' }, geometry: { type: 'Point', coordinates: [-108, 3] } },
+        { type: 'Feature', properties: { label: 'A · West Pacific', color: '#A8D4EE' }, geometry: { type: 'Point', coordinates: [155, 3] } },
+        { type: 'Feature', properties: { label: 'B · Central', color: '#6ABADE' }, geometry: { type: 'Point', coordinates: [-155, 3] } },
+        { type: 'Feature', properties: { label: 'C · East tropical', color: '#3A98C8' }, geometry: { type: 'Point', coordinates: [-108, 3] } },
       ]}});
       map.addLayer({ id: 'fishery-labels', type: 'symbol', source: 'fishery-labels', layout: { 'text-field': ['get', 'label'], 'text-font': ['Open Sans Bold', 'Arial Unicode MS Bold'], 'text-size': 11, 'text-anchor': 'center' }, paint: { 'text-color': ['get', 'color'], 'text-halo-color': '#0A1428', 'text-halo-width': 2 } });
 
@@ -394,7 +394,7 @@ export function PacificMap({ phase }: Props) {
         eezPopup.setLngLat(e.lngLat).setHTML(
           `<div style="font-family:Inter,sans-serif;font-size:11px;line-height:1.5;padding:4px 2px;">
             <strong style="color:#fff;display:block;margin-bottom:2px;">${name}</strong>
-            <span style="color:${closed ? '#E5443A' : '#3AC58E'};">${closed ? '⛔ Closed to fishing' : '✓ Open to fishing'}</span><br>
+            <span style="color:${closed ? '#E5443A' : '#22C55E'};">${closed ? '⛔ Closed to fishing' : '✓ Open to fishing'}</span><br>
             <span style="color:#ccc;">Area: </span><span style="color:#888;">${area} km²</span><br>
             <span style="color:#666;font-style:italic;">${closed ? 'Click to reopen' : 'Click to close'}</span>
           </div>`

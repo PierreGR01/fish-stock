@@ -17,20 +17,31 @@
   /* Signals */
   --signal-danger: #E5443A;
   --signal-warn:   #F2A93B;
-  --signal-ok:     #3AC58E;
+  --signal-ok:     #22C55E;   /* pure green — distinct from teal/biomass */
   --signal-info:   #4DA8DA;
 
   --danger-dim: rgba(229, 68,  58,  0.14);
   --warn-dim:   rgba(242, 169, 59,  0.12);
-  --ok-dim:     rgba(58,  197, 142, 0.12);
+  --ok-dim:     rgba(34,  197, 94,  0.12);
 
-  /* Fishery zone colours */
-  --fish-a:       #4DA8DA;
-  --fish-a-dim:   rgba(77, 168, 218, 0.18);
-  --fish-b:       #3AC58E;
-  --fish-b-dim:   rgba(58, 197, 142, 0.18);
-  --fish-c:       #F2A93B;
-  --fish-c-dim:   rgba(242, 169, 59, 0.18);
+  /* Scenario comparison colours — colorblind-safe (indigo vs orange, Okabe-Ito inspired) */
+  --scenario-a:     #818CF8;   /* indigo-400 — luminance ~0.31, balanced with scenario-b orange ~0.33 */
+  --scenario-a-dim: rgba(99,102,241,0.14);
+  --scenario-b:     #F97316;
+  --scenario-b-dim: rgba(249,115,22,0.14);
+
+  /* Fishery zone colours — 3 shades of the same pale blue hue */
+  --fish-a:       #A8D4EE;   /* Zone A — lightest */
+  --fish-a-dim:   rgba(168,212,238,0.18);
+  --fish-b:       #6ABADE;   /* Zone B — medium */
+  --fish-b-dim:   rgba(106,186,222,0.18);
+  --fish-c:       #3A98C8;   /* Zone C — darkest */
+  --fish-c-dim:   rgba(58,152,200,0.18);
+
+  /* Metric colours — one distinct hue per data layer, used in toggle, graphs, map legend */
+  --metric-biomass:     #2DD4BF;   /* teal / sea-green */
+  --metric-catch:       #84CC16;   /* lime green — between teal (biomass) and amber (recruitment) */
+  --metric-recruitment: #EAB308;   /* golden amber (yellow-shifted, distinct from scenario-b orange) */
 
   /* Typography */
   --font-ui:   'Inter', sans-serif;

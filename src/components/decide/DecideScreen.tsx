@@ -1,22 +1,35 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useFishStore } from '../../store/fishStore';
 import type { MapLayer } from '../../store/fishStore';
 import { PacificMap } from '../map/PacificMap';
-import { ResultsPanel } from './ResultsPanel';
+import { ResultsPanel, ComparisonChart, calcKPIs } from './ResultsPanel';
 import { GlobalTimeline } from './GlobalTimeline';
 import { SaveScenarioModal } from './SaveScenarioModal';
-import { VERDICT_A, VERDICT_B } from '../../data/mockData';
+import {
+  VERDICT_A, VERDICT_B, YEARS,
+  BIOMASS_A, CATCH_A, RECRUITMENT_A,
+  BIOMASS_B, CATCH_B, RECRUITMENT_B,
+} from '../../data/mockData';
 
 // ── Chip ─────────────────────────────────────────────────────────────────
 
-function Chip({ children, dimmed }: { children: React.ReactNode; dimmed?: boolean }) {
+const ZONE_CSS: Record<string, string> = {
+  A: 'var(--fish-a)', B: 'var(--fish-b)', C: 'var(--fish-c)',
+};
+
+function Chip({ children, dimmed, zoneId }: { children: React.ReactNode; dimmed?: boolean; zoneId?: string }) {
+  const swatchColor = zoneId ? ZONE_CSS[zoneId] : undefined;
   return (
     <div style={{
-      padding: '2px 8px',
+      display: 'flex', alignItems: 'center', gap: swatchColor ? 5 : 0,
+      padding: swatchColor ? '2px 8px 2px 5px' : '2px 8px',
       background: 'var(--ink-500)', border: '1px solid rgba(255,255,255,0.08)',
       borderRadius: 12, fontFamily: 'var(--font-ui)', fontSize: 9, color: 'var(--text-mid)',
       whiteSpace: 'nowrap', opacity: dimmed ? 0.5 : 1,
-    }}>{children}</div>
+    }}>
+      {swatchColor && <div style={{ width: 8, height: 8, borderRadius: 2, background: swatchColor, flexShrink: 0 }} />}
+      {children}
+    </div>
   );
 }
 
@@ -127,13 +140,13 @@ function SingleBanner() {
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: 3, flexShrink: 0 }}>
             <GroupLabel>Catch</GroupLabel>
-            <Chip><b>A West</b> · {fmtNum(catchA)} t · {modeAbbr(catchAMode)}</Chip>
-            <Chip>
+            <Chip zoneId="A"><b>A West</b> · {fmtNum(catchA)} t · {modeAbbr(catchAMode)}</Chip>
+            <Chip zoneId="B">
               <b>B Central</b> · {catchBMode === 'per-year'
                 ? 'per-year'
                 : `${fmtNum(catchB)} t · ${modeAbbr(catchBMode)}`}
             </Chip>
-            <Chip><b>C East</b> · {fmtNum(catchC)} t · {modeAbbr(catchCMode)}</Chip>
+            <Chip zoneId="C"><b>C East</b> · {fmtNum(catchC)} t · {modeAbbr(catchCMode)}</Chip>
           </div>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: 3, flexShrink: 0 }}>
@@ -204,45 +217,143 @@ function SingleBanner() {
   );
 }
 
+// ── Scenario colour tokens (mirrors tokens.css) ───────────────────────────
+export const SCENARIO_COLORS = { A: 'var(--scenario-a)', B: 'var(--scenario-b)' } as const;
+
+// ── VerdictCard ───────────────────────────────────────────────────────────
+
+function VerdictCard({
+  scenario, verdict, checked, onToggle,
+}: {
+  scenario: 'A' | 'B';
+  verdict: { trend: string; text: string; detail: string };
+  checked: boolean;
+  onToggle: () => void;
+}) {
+  const [hover, setHover] = useState(false);
+  const color = SCENARIO_COLORS[scenario];
+  const trendColor = verdict.trend === 'down' ? 'var(--signal-danger)' : 'var(--signal-ok)';
+
+  return (
+    <button
+      onClick={onToggle}
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+      title={checked ? `Deselect scenario ${scenario}` : `Select scenario ${scenario}`}
+      style={{
+        flex: 1, display: 'flex', alignItems: 'center', gap: 10,
+        padding: '10px 14px',
+        background: checked && hover ? `color-mix(in srgb, ${color} 8%, transparent)` : 'transparent',
+        border: 'none',
+        cursor: 'pointer',
+        opacity: checked ? 1 : 0.38,
+        transition: 'opacity 0.2s ease, background 0.15s ease',
+        textAlign: 'left',
+      }}
+    >
+      {/* Custom checkbox */}
+      <div style={{
+        width: 14, height: 14, borderRadius: 2, flexShrink: 0,
+        border: `2px solid ${checked ? color : 'rgba(255,255,255,0.3)'}`,
+        background: checked ? color : 'transparent',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        transition: 'all 0.15s ease',
+      }}>
+        {checked && <span style={{ color: '#fff', fontSize: 9, lineHeight: 1, fontWeight: 700 }}>✓</span>}
+      </div>
+
+      <VerdictArrow trend={verdict.trend as 'up' | 'down'} small />
+
+      <div>
+        <div style={{ fontFamily: 'var(--font-ui)', fontSize: 8, textTransform: 'uppercase', letterSpacing: '0.4px', color, marginBottom: 2, fontWeight: 600 }}>
+          Scenario {scenario}
+        </div>
+        <div style={{ fontFamily: 'var(--font-ui)', fontSize: 11, fontWeight: 600, color: trendColor }}>
+          {verdict.text}
+        </div>
+        <div style={{ fontFamily: 'var(--font-ui)', fontSize: 9, color: 'var(--text-lo)', marginTop: 1 }}>
+          {verdict.detail}
+        </div>
+      </div>
+    </button>
+  );
+}
+
+// ── DiffBlock ─────────────────────────────────────────────────────────────
+
+function DiffBlock() {
+  const kpisA = useMemo(() => calcKPIs(BIOMASS_A), []);
+  const kpisB = useMemo(() => calcKPIs(BIOMASS_B), []);
+
+  const d2055 = kpisB.v2055 - kpisA.v2055;
+  const d2099 = kpisB.v2099 - kpisA.v2099;
+  const sign = (v: number) => (v >= 0 ? '+' : '');
+  const deltaColor = (v: number) => v >= 0 ? 'var(--signal-ok)' : 'var(--signal-danger)';
+
+  function Row({ label, value, unit }: { label: string; value: number; unit?: string }) {
+    return (
+      <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 8 }}>
+        <span style={{ fontFamily: 'var(--font-ui)', fontSize: 8, color: 'var(--text-lo)', flexShrink: 0 }}>{label}</span>
+        <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, fontWeight: 600, color: deltaColor(value), whiteSpace: 'nowrap' }}>
+          {sign(value)}{value.toFixed(1)}{unit ? <span style={{ fontSize: 8, fontWeight: 400, color: 'var(--text-lo)', marginLeft: 2 }}>{unit}</span> : null}
+        </span>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{
+      flexShrink: 0, padding: '8px 14px',
+      borderLeft: '1px solid var(--ink-500)', borderRight: '1px solid var(--ink-500)',
+      display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: 5, minWidth: 150,
+    }}>
+      <div style={{ fontFamily: 'var(--font-ui)', fontSize: 7, textTransform: 'uppercase', letterSpacing: '0.5px', color: 'var(--text-lo)', marginBottom: 2 }}>
+        B vs A · biomass delta
+      </div>
+      <Row label="2055" value={d2055} unit="t/km²" />
+      <Row label="2099" value={d2099} unit="t/km²" />
+      <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 8 }}>
+        <span style={{ fontFamily: 'var(--font-ui)', fontSize: 8, color: 'var(--text-lo)' }}>Crit. yr A</span>
+        <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, fontWeight: 600, color: 'var(--signal-danger)', whiteSpace: 'nowrap' }}>
+          {kpisA.critYear ?? '—'}
+        </span>
+      </div>
+      <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 8 }}>
+        <span style={{ fontFamily: 'var(--font-ui)', fontSize: 8, color: 'var(--text-lo)' }}>Crit. yr B</span>
+        <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, fontWeight: 600, color: kpisB.critYear ? 'var(--signal-danger)' : 'var(--signal-ok)', whiteSpace: 'nowrap' }}>
+          {kpisB.critYear ?? 'not reached'}
+        </span>
+      </div>
+    </div>
+  );
+}
+
 // ── ComparisonBanner ──────────────────────────────────────────────────────
 
 function ComparisonBanner() {
-  const setComparisonMode = useFishStore(s => s.setComparisonMode);
+  const { setComparisonMode, comparisonScenarios, toggleComparisonScenario } = useFishStore();
   const [showSaveModal, setShowSaveModal] = useState(false);
 
   return (
     <div style={{
-      display: 'flex', alignItems: 'center', gap: 16,
-      padding: '8px 16px', background: 'var(--ink-700)',
-      borderBottom: '1px solid var(--ink-500)', flexShrink: 0, minHeight: 66,
+      display: 'flex', alignItems: 'stretch',
+      background: 'var(--ink-700)',
+      borderBottom: '1px solid var(--ink-500)', flexShrink: 0,
     }}>
-      <div style={{ flex: 1 }}>
-        <div style={{ fontFamily: 'var(--font-ui)', fontSize: 8, textTransform: 'uppercase', letterSpacing: '0.5px', color: 'var(--text-lo)', marginBottom: 6 }}>
-          Comparison — two verdicts
-        </div>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
-          {[VERDICT_A, VERDICT_B].map((v, i) => (
-            <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <VerdictArrow trend={v.trend as 'up' | 'down'} small />
-              <div>
-                <span style={{ fontFamily: 'var(--font-ui)', fontSize: 11, fontWeight: 600, color: v.trend === 'down' ? 'var(--signal-danger)' : 'var(--signal-ok)' }}>
-                  Scenario {i === 0 ? 'A' : 'B'} · {v.text}
-                </span>
-                <span style={{ fontFamily: 'var(--font-ui)', fontSize: 9, color: 'var(--text-lo)', marginLeft: 6 }}>{v.detail}</span>
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
 
-      <div style={{ textAlign: 'center', padding: '0 16px', borderLeft: '1px solid var(--ink-500)', borderRight: '1px solid var(--ink-500)' }}>
-        <div style={{ fontFamily: 'var(--font-ui)', fontSize: 8, textTransform: 'uppercase', letterSpacing: '0.5px', color: 'var(--text-lo)', marginBottom: 4 }}>Difference (B − A)</div>
-        <div style={{ fontFamily: 'var(--font-mono)', fontSize: 22, fontWeight: 600, color: 'var(--signal-ok)' }}>+31</div>
-        <div style={{ fontFamily: 'var(--font-ui)', fontSize: 10, color: 'var(--text-mid)' }}>pts biomass</div>
-        <div style={{ fontFamily: 'var(--font-ui)', fontSize: 8, color: 'var(--text-lo)' }}>B closes more zones + lower catch C</div>
-      </div>
+      <VerdictCard scenario="A" verdict={VERDICT_A}
+        checked={comparisonScenarios.includes('A')}
+        onToggle={() => toggleComparisonScenario('A')} />
 
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 4, flexShrink: 0 }}>
+      <div style={{ width: 1, background: 'var(--ink-500)', flexShrink: 0 }} />
+
+      <VerdictCard scenario="B" verdict={VERDICT_B}
+        checked={comparisonScenarios.includes('B')}
+        onToggle={() => toggleComparisonScenario('B')} />
+
+      <DiffBlock />
+
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 4, justifyContent: 'center', flexShrink: 0, padding: '8px 12px' }}>
         <button onClick={() => setShowSaveModal(true)} style={{ padding: '4px 10px', fontSize: 10, fontFamily: 'var(--font-ui)', background: 'var(--ink-500)', border: '1px solid var(--ice-border)', borderRadius: 'var(--radius-sm)', color: 'var(--text-mid)', cursor: 'pointer' }}>
           ⤓ Save comparison
         </button>
@@ -262,9 +373,9 @@ function ComparisonBanner() {
 // ── UnifiedToggle ─────────────────────────────────────────────────────────
 
 const ZONE_COLORS: Record<string, string> = {
-  A: '#4DA8DA',
-  B: '#3AC58E',
-  C: '#F2A93B',
+  A: '#A8D4EE',
+  B: '#6ABADE',
+  C: '#3A98C8',
 };
 const ZONE_NAMES: Record<string, string> = {
   A: 'West Pacific',
@@ -273,13 +384,13 @@ const ZONE_NAMES: Record<string, string> = {
 };
 
 const TOGGLE_SERIES = [
-  { key: 'biomass'     as MapLayer, label: 'Biomass',     unit: 't/km²', color: 'var(--fish-a)' },
-  { key: 'catch'       as MapLayer, label: 'Catch',       unit: 't/yr',  color: 'var(--fish-b)' },
-  { key: 'recruitment' as MapLayer, label: 'Recruitment', unit: 'index', color: 'var(--fish-c)' },
+  { key: 'biomass'     as MapLayer, label: 'Biomass',     unit: 't/km²', color: 'var(--metric-biomass)' },
+  { key: 'catch'       as MapLayer, label: 'Catch',       unit: 't/yr',  color: 'var(--metric-catch)' },
+  { key: 'recruitment' as MapLayer, label: 'Recruitment', unit: 'index', color: 'var(--metric-recruitment)' },
 ] as const;
 
 function UnifiedToggle() {
-  const { mapLayer, setMapLayer, setFeaturedSeries, comparisonMode, mapScenario, setMapScenario, selectedZone, setSelectedZone } = useFishStore();
+  const { mapLayer, setMapLayer, setFeaturedSeries, selectedZone, setSelectedZone } = useFishStore();
 
   const handleToggle = (l: MapLayer) => {
     setMapLayer(l);
@@ -314,22 +425,8 @@ function UnifiedToggle() {
         )}
       </div>
 
-      {/* Absolutely centered — scenario selector (comparison) + layer toggle */}
+      {/* Absolutely centered — layer toggle */}
       <div style={{ position: 'absolute', left: '50%', transform: 'translateX(-50%)', display: 'flex', alignItems: 'center', gap: 6 }}>
-        {comparisonMode && (
-          <div style={{ display: 'flex', border: '1px solid var(--ice-border)', borderRadius: 'var(--radius-sm)', overflow: 'hidden', marginRight: 8 }}>
-            {(['A', 'B'] as const).map(s => (
-              <button key={s} onClick={() => setMapScenario(s)} style={{
-                padding: '3px 12px', fontSize: 10, fontFamily: 'var(--font-ui)',
-                background: mapScenario === s ? 'var(--ice-dim)' : 'transparent',
-                border: 'none', borderRight: s === 'A' ? '1px solid var(--ice-border)' : 'none',
-                color: mapScenario === s ? 'var(--ice)' : 'var(--text-lo)',
-                cursor: 'pointer', fontWeight: mapScenario === s ? 600 : 400,
-              }}>Scenario {s}</button>
-            ))}
-          </div>
-        )}
-
         {TOGGLE_SERIES.map(s => {
           const isActive = mapLayer === s.key;
           return (
@@ -367,36 +464,29 @@ function UnifiedToggle() {
   );
 }
 
-// ── ComparisonColumns ─────────────────────────────────────────────────────
+// ── ComparisonPanel ───────────────────────────────────────────────────────
 
-function ComparisonColumns() {
-  const SCENARIO_B_CHIPS = ['C East 15 000 · ↓', 'PIPA, Nauru, Tuvalu', 'IPCC Low'];
-  const SCENARIO_A_CHIPS = ['C East 28 500 · ↓', 'PIPA, Nauru', 'IPCC Med'];
+const COMPARISON_DATA: Record<MapLayer, { A: number[]; B: number[] }> = {
+  biomass:     { A: BIOMASS_A,     B: BIOMASS_B },
+  catch:       { A: CATCH_A,       B: CATCH_B },
+  recruitment: { A: RECRUITMENT_A, B: RECRUITMENT_B },
+};
+
+function ComparisonPanel() {
+  const featuredSeries = useFishStore(s => s.featuredSeries);
+  const activeYear     = useFishStore(s => s.activeYear);
+  const activeIdx      = useMemo(() => YEARS.indexOf(activeYear), [activeYear]);
+
+  const { A: dataA, B: dataB } = COMPARISON_DATA[featuredSeries];
 
   return (
-    <div style={{ flex: 1, display: 'flex', overflow: 'hidden', minHeight: 0 }}>
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', borderRight: '1px solid var(--ink-500)' }}>
-        <div style={{ padding: '8px 12px', borderBottom: '1px solid var(--ink-500)', flexShrink: 0 }}>
-          <div style={{ fontFamily: 'var(--font-ui)', fontSize: 11, fontWeight: 600, color: 'var(--text-hi)', marginBottom: 4 }}>Scenario A</div>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 3 }}>
-            {SCENARIO_A_CHIPS.map(c => <Chip key={c}>{c}</Chip>)}
-          </div>
-        </div>
-        <div style={{ flex: 1, overflow: 'hidden' }}>
-          <ResultsPanel scenario="A" compact />
-        </div>
-      </div>
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
-        <div style={{ padding: '8px 12px', borderBottom: '1px solid var(--ink-500)', flexShrink: 0 }}>
-          <div style={{ fontFamily: 'var(--font-ui)', fontSize: 11, fontWeight: 600, color: 'var(--text-hi)', marginBottom: 4 }}>Scenario B</div>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 3 }}>
-            {SCENARIO_B_CHIPS.map(c => <Chip key={c}>{c}</Chip>)}
-          </div>
-        </div>
-        <div style={{ flex: 1, overflow: 'hidden' }}>
-          <ResultsPanel scenario="B" compact />
-        </div>
-      </div>
+    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minHeight: 0, padding: '10px 14px 8px' }}>
+      <ComparisonChart
+        dataA={dataA}
+        dataB={dataB}
+        featured={featuredSeries}
+        activeYearIdx={activeIdx >= 0 ? activeIdx : undefined}
+      />
     </div>
   );
 }
@@ -422,7 +512,7 @@ export function DecideScreen() {
 
         {/* Data panel 45% — full width in print */}
         <div className="print-results" style={{ flex: '0 0 45%', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
-          {comparisonMode ? <ComparisonColumns /> : <ResultsPanel />}
+          {comparisonMode ? <ComparisonPanel /> : <ResultsPanel />}
         </div>
       </div>
 

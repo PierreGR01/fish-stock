@@ -68,7 +68,8 @@ interface FishState {
   mapLayer: MapLayer;
   featuredSeries: MapLayer;
   comparisonMode: boolean;
-  mapScenario: ScenarioId;
+  comparisonScenarios: ScenarioId[];
+  mapScenario: ScenarioId | null;
   selectedZone: 'A' | 'B' | 'C' | null;
   kpis: KPIsResult | null;
 
@@ -107,7 +108,8 @@ interface FishState {
   setMapLayer: (l: MapLayer) => void;
   setFeaturedSeries: (s: MapLayer) => void;
   setComparisonMode: (v: boolean) => void;
-  setMapScenario: (s: ScenarioId) => void;
+  toggleComparisonScenario: (s: ScenarioId) => void;
+  setMapScenario: (s: ScenarioId | null) => void;
   setSelectedZone: (zone: 'A' | 'B' | 'C' | null) => void;
   setKpis: (k: KPIsResult | null) => void;
 
@@ -148,7 +150,8 @@ export const useFishStore = create<FishState>((set, get) => ({
   mapLayer: 'biomass',
   featuredSeries: 'biomass',
   comparisonMode: false,
-  mapScenario: 'A',
+  comparisonScenarios: ['A', 'B'],
+  mapScenario: null,
   selectedZone: null,
   kpis: null,
 
@@ -205,7 +208,14 @@ export const useFishStore = create<FishState>((set, get) => ({
   setPlaySpeed: (s) => set({ playSpeed: s }),
   setMapLayer: (l) => set({ mapLayer: l, featuredSeries: l }),
   setFeaturedSeries: (s) => set({ featuredSeries: s, mapLayer: s }),
-  setComparisonMode: (v) => set({ comparisonMode: v }),
+  setComparisonMode: (v) => set({ comparisonMode: v, comparisonScenarios: ['A', 'B'], mapScenario: null }),
+  toggleComparisonScenario: (s) => set((state) => {
+    const current = state.comparisonScenarios;
+    if (current.includes(s) && current.length === 1) return state; // keep at least one
+    const next = current.includes(s) ? current.filter(x => x !== s) : [...current, s as ScenarioId];
+    const newMap = next.length === 1 ? next[0] : null;
+    return { comparisonScenarios: next, mapScenario: newMap };
+  }),
   setMapScenario: (s) => set({ mapScenario: s }),
   setSelectedZone: (zone) => set({ selectedZone: zone }),
   setKpis: (k) => set({ kpis: k }),
