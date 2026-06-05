@@ -5,34 +5,84 @@ import { useFishStore } from '../../store/fishStore';
 import type { Phase, MapLayer, CustomZone } from '../../store/fishStore';
 import { MapLegend } from './MapLegend';
 import { CurrentsLayer } from './CurrentsLayer';
+import eezZonesRaw from '../../data/eez_zones.json';
 
 // ── Fishery zone GeoJSON ───────────────────────────────────────────────────
+// Polygons follow approximate WCPFC/IATTC treaty boundaries (not rectangles).
 const FISHERY_FEATURES: GeoJSON.Feature[] = [
   {
+    // WCPFC western area: 130°E → 180°, tropical band, following Micronesia/Melanesia coastlines
     type: 'Feature',
     properties: { id: 'A', name: 'A · West Pacific', color: '#4DA8DA', opacity: 0.18 },
-    geometry: { type: 'Polygon', coordinates: [[[130,-15],[180,-15],[180,20],[130,20],[130,-15]]] },
+    geometry: {
+      type: 'Polygon',
+      coordinates: [[
+        [130,  20],  // NW – Luzon / Taiwan latitude
+        [155,  22],  // N  – Caroline Islands
+        [170,  20],  // N  – Marshall Islands
+        [180,  15],  // NE – approaching dateline
+        [180,  -5],  // E  – equatorial
+        [175, -12],  // E  – Wallis & Futuna
+        [165, -20],  // SE – Vanuatu
+        [148, -22],  // S  – Coral Sea
+        [140, -18],  // S  – PNG southeast
+        [132,  -8],  // SW – PNG north coast
+        [130,   5],  // W  – Sulawesi
+        [130,  20],
+      ]],
+    },
   },
   {
+    // WCPFC/IATTC overlap zone: dateline → 130°W, central equatorial Pacific
     type: 'Feature',
     properties: { id: 'B', name: 'B · Central', color: '#3AC58E', opacity: 0.18 },
-    geometry: { type: 'Polygon', coordinates: [[[-180,-15],[-150,-15],[-150,15],[-180,15],[-180,-15]]] },
+    geometry: {
+      type: 'Polygon',
+      coordinates: [[
+        [-180,  15],  // NW – dateline
+        [-162,  22],  // N  – south of Hawaii
+        [-145,  20],  // NE
+        [-130,  12],  // E  – north
+        [-130, -15],  // E  – south
+        [-148, -22],  // SE – French Polynesia
+        [-165, -20],  // S  – Tonga / Samoa
+        [-180, -15],  // SW – dateline
+        [-180,  15],
+      ]],
+    },
   },
   {
+    // IATTC eastern tropical Pacific: 130°W → 78°W, following continental shelf geometry
     type: 'Feature',
     properties: { id: 'C', name: 'C · East tropical', color: '#F2A93B', opacity: 0.18 },
-    geometry: { type: 'Polygon', coordinates: [[[-150,-20],[-85,-20],[-85,20],[-150,20],[-150,-20]]] },
+    geometry: {
+      type: 'Polygon',
+      coordinates: [[
+        [-130,  12],  // NW
+        [-115,  25],  // N  – Baja California
+        [ -85,  22],  // NE – Gulf of California
+        [ -78,   8],  // E  – Panama / Costa Rica
+        [ -82,  -5],  // E  – Ecuador
+        [ -88, -18],  // SE – Peru
+        [-110, -22],  // S
+        [-130, -15],  // SW
+        [-130,  12],
+      ]],
+    },
   },
 ];
 
-const EEZ_SHAPES: Record<string, GeoJSON.Polygon> = {
-  'Kiribati (PIPA)': { type: 'Polygon', coordinates: [[[-175,-5],[-168,-5],[-168,2],[-175,2],[-175,-5]]] },
-  'Nauru EEZ':       { type: 'Polygon', coordinates: [[[164,-1],[170,-1],[170,2],[164,2],[164,-1]]] },
-  'Tuvalu EEZ':      { type: 'Polygon', coordinates: [[[176,-11],[180,-11],[180,-7],[176,-7],[176,-11]]] },
-  'Tokelau EEZ':     { type: 'Polygon', coordinates: [[[-173,-12],[-168,-12],[-168,-8],[-173,-8],[-173,-12]]] },
-};
+interface EezZone {
+  name: string;
+  mrgid: number;
+  area_km2: number;
+  labelCoord: [number, number];
+  geometry: GeoJSON.Polygon | GeoJSON.MultiPolygon;
+}
+// Real EEZ geometries from tuna-viewer.lab.dive.edito.eu/data/eez_reduced.json (MRGID source: MarineRegions)
+const EEZ_ZONES = eezZonesRaw as unknown as EezZone[];
 
-const ZONE_AREAS: Record<string, string> = { A: '8 400', B: '4 100', C: '11 800' };
+const ZONE_AREAS: Record<string, string> = { A: '~32 M km²', B: '~18 M km²', C: '~49 M km²' };
 
 // Each zone starts at a distinct base and follows its own trajectory per layer.
 // val=1 → deep green (healthy/low-pressure), val=0 → deep red (critical/high-pressure).
@@ -192,9 +242,9 @@ export function PacificMap({ phase }: Props) {
 
       // Zone labels
       map.addSource('fishery-labels', { type: 'geojson', data: { type: 'FeatureCollection', features: [
-        { type: 'Feature', properties: { label: 'A · West Pacific', color: '#4DA8DA' }, geometry: { type: 'Point', coordinates: [155, 5] } },
-        { type: 'Feature', properties: { label: 'B · Central', color: '#3AC58E' }, geometry: { type: 'Point', coordinates: [-165, 3] } },
-        { type: 'Feature', properties: { label: 'C · East tropical', color: '#F2A93B' }, geometry: { type: 'Point', coordinates: [-120, 5] } },
+        { type: 'Feature', properties: { label: 'A · West Pacific', color: '#4DA8DA' }, geometry: { type: 'Point', coordinates: [155, 3] } },
+        { type: 'Feature', properties: { label: 'B · Central', color: '#3AC58E' }, geometry: { type: 'Point', coordinates: [-155, 3] } },
+        { type: 'Feature', properties: { label: 'C · East tropical', color: '#F2A93B' }, geometry: { type: 'Point', coordinates: [-108, 3] } },
       ]}});
       map.addLayer({ id: 'fishery-labels', type: 'symbol', source: 'fishery-labels', layout: { 'text-field': ['get', 'label'], 'text-font': ['Open Sans Bold', 'Arial Unicode MS Bold'], 'text-size': 11, 'text-anchor': 'center' }, paint: { 'text-color': ['get', 'color'], 'text-halo-color': '#0A1428', 'text-halo-width': 2 } });
 
@@ -206,6 +256,63 @@ export function PacificMap({ phase }: Props) {
       // Heatmap overlay
       map.addSource('heatmap', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
       map.addLayer({ id: 'heatmap-fill', type: 'fill', source: 'heatmap', paint: { 'fill-color': ['get', 'heatColor'], 'fill-opacity': 0.45 } });
+
+      // EEZ zones — always visible, style driven by open/closed state (added above SST/heatmap so they remain readable)
+      const eezInitial: GeoJSON.Feature[] = EEZ_ZONES.map(z => ({
+        type: 'Feature' as const,
+        properties: { name: z.name, closed: false, area_km2: z.area_km2 },
+        geometry: z.geometry,
+      }));
+      map.addSource('eez-zones', { type: 'geojson', data: { type: 'FeatureCollection', features: eezInitial } });
+      map.addLayer({
+        id: 'eez-fill', type: 'fill', source: 'eez-zones',
+        paint: {
+          'fill-color': ['case', ['get', 'closed'], '#E5443A', '#ffffff'],
+          'fill-opacity': ['case', ['get', 'closed'], 0.20, 0.04],
+        },
+      });
+      map.addLayer({
+        id: 'eez-outline', type: 'line', source: 'eez-zones',
+        paint: {
+          'line-color': ['case', ['get', 'closed'], '#E5443A', '#aab4cc'],
+          'line-width': 1.2,
+          'line-opacity': ['case', ['get', 'closed'], 0.9, 0.55],
+          'line-dasharray': [3, 2],
+        },
+      });
+      map.addLayer({
+        id: 'eez-names', type: 'symbol', source: 'eez-zones',
+        layout: {
+          'text-field': ['get', 'name'],
+          'text-font': ['Open Sans Regular', 'Arial Unicode MS Regular'],
+          'text-size': 8,
+          'text-anchor': 'center',
+          'text-optional': true,
+        },
+        paint: {
+          'text-color': ['case', ['get', 'closed'], '#E5443A', 'rgba(190,200,220,0.85)'],
+          'text-halo-color': '#0A1428',
+          'text-halo-width': 1.5,
+        },
+      });
+
+      // EEZ hover popup
+      const eezPopup = new maplibregl.Popup({ closeButton: false, closeOnClick: false, offset: 8 });
+      map.on('mouseenter', 'eez-fill', (e) => {
+        if (!e.features?.length) return;
+        const name = e.features[0].properties?.name as string;
+        const closed = !!e.features[0].properties?.closed;
+        const area = (e.features[0].properties?.area_km2 as number | undefined)?.toLocaleString() ?? '–';
+        eezPopup.setLngLat(e.lngLat).setHTML(
+          `<div style="font-family:Inter,sans-serif;font-size:11px;line-height:1.5;padding:4px 2px;">
+            <strong style="color:#fff;display:block;margin-bottom:2px;">${name}</strong>
+            <span style="color:${closed ? '#E5443A' : '#3AC58E'};">${closed ? '⛔ Closed to fishing' : '✓ Open to fishing'}</span><br>
+            <span style="color:#ccc;">Area: </span><span style="color:#888;">${area} km²</span>
+          </div>`
+        ).addTo(map);
+        map.getCanvas().style.cursor = 'pointer';
+      });
+      map.on('mouseleave', 'eez-fill', () => { eezPopup.remove(); map.getCanvas().style.cursor = ''; });
 
       // ── TASK-01: SST WMS layer ─────────────────────────────────────────────
       try {
@@ -539,16 +646,19 @@ function applyState(
   mapLayer: MapLayer,
   scenario: 'A' | 'B',
 ) {
-  const closureFeatures: GeoJSON.Feature[] = closures
-    .filter(eez => EEZ_SHAPES[eez])
-    .map(eez => ({ type: 'Feature' as const, properties: { eez }, geometry: EEZ_SHAPES[eez] }));
+  // Update each EEZ zone with its open/closed state
+  const eezFeatures: GeoJSON.Feature[] = EEZ_ZONES.map(z => ({
+    type: 'Feature' as const,
+    properties: { name: z.name, closed: closures.includes(z.name), area_km2: z.area_km2 },
+    geometry: z.geometry,
+  }));
+  (map.getSource('eez-zones') as maplibregl.GeoJSONSource)?.setData({ type: 'FeatureCollection', features: eezFeatures });
 
-  // TASK-05: custom drawn zone also shown as closure
-  if (customZone) {
-    closureFeatures.push({ type: 'Feature' as const, properties: { eez: 'custom' }, geometry: customZone });
-  }
-
-  (map.getSource('closures') as maplibregl.GeoJSONSource)?.setData({ type: 'FeatureCollection', features: closureFeatures });
+  // TASK-05: custom drawn zone only (EEZ zones now handled by eez-zones source)
+  const customFeatures: GeoJSON.Feature[] = customZone
+    ? [{ type: 'Feature' as const, properties: { eez: 'custom' }, geometry: customZone }]
+    : [];
+  (map.getSource('closures') as maplibregl.GeoJSONSource)?.setData({ type: 'FeatureCollection', features: customFeatures });
 
   if (isDecide) {
     const heatFeatures: GeoJSON.Feature[] = FISHERY_FEATURES.map(f => ({
