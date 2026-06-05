@@ -171,8 +171,19 @@ function ComparisonBanner() {
 
 // ── LayerSelector ─────────────────────────────────────────────────────────
 
+const ZONE_COLORS: Record<string, string> = {
+  A: '#4DA8DA',
+  B: '#3AC58E',
+  C: '#F2A93B',
+};
+const ZONE_NAMES: Record<string, string> = {
+  A: 'West Pacific',
+  B: 'Central',
+  C: 'East tropical',
+};
+
 function LayerSelector() {
-  const { mapLayer, setMapLayer, comparisonMode, mapScenario, setMapScenario } = useFishStore();
+  const { mapLayer, setMapLayer, comparisonMode, mapScenario, setMapScenario, selectedZone, setSelectedZone } = useFishStore();
 
   return (
     <div style={{
@@ -211,9 +222,30 @@ function LayerSelector() {
           }}>{l}</button>
         ))}
       </div>
-      <span style={{ fontFamily: 'var(--font-ui)', fontSize: 9, color: 'var(--text-lo)', marginLeft: 'auto' }}>
-        2D choropleth · driven by timeline
-      </span>
+
+      {/* Scope bandeau dynamique */}
+      <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 6, fontFamily: 'var(--font-ui)', fontSize: 10 }}>
+        {selectedZone ? (
+          <>
+            <span style={{ color: ZONE_COLORS[selectedZone], fontSize: 12 }}>◉</span>
+            <span style={{ color: 'var(--text-hi)' }}>Zone {selectedZone} · {ZONE_NAMES[selectedZone]}</span>
+            <button
+              onClick={() => setSelectedZone(null)}
+              style={{
+                background: 'none', border: 'none', cursor: 'pointer',
+                color: 'var(--text-lo)', fontSize: 10, padding: '0 2px',
+                lineHeight: 1, fontFamily: 'var(--font-ui)',
+              }}
+              title="Retour à la vue globale"
+            >✕</button>
+          </>
+        ) : (
+          <>
+            <span style={{ color: 'var(--text-lo)', fontSize: 12 }}>○</span>
+            <span style={{ color: 'var(--text-lo)' }}>Global · 3 zones agrégées</span>
+          </>
+        )}
+      </div>
     </div>
   );
 }

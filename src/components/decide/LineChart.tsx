@@ -1,6 +1,6 @@
 // TASK-12/13 — LineChart with Y axis, trend annotation, critical-year marker
 import { useMemo } from 'react';
-import { YEARS, HISTORY_END } from '../../data/mockData';
+import { HISTORY_END } from '../../data/mockData';
 
 interface Props {
   data: number[];
@@ -24,12 +24,12 @@ function smoothPath(points: [number, number][]): string {
   return d;
 }
 
-// TASK-13 — Y axis with 3 graduations (left padding 30px in viewBox)
+// TASK-13 — Y axis left padding in viewBox units (0–100 scale = % of SVG width)
 const PAD_LEFT = 30;
 const PAD_RIGHT = 4;
 
 export function LineChart({ data, height = 60, color = 'var(--ice)', activeYearIdx, unit, showAnnotation = false }: Props) {
-  const { pts, minV, maxV } = useMemo(() => {
+  const { pts, minV, maxV, span } = useMemo(() => {
     const minV = Math.min(...data) * 0.9;
     const maxV = Math.max(...data) * 1.05;
     const span  = maxV - minV || 1;
@@ -39,7 +39,7 @@ export function LineChart({ data, height = 60, color = 'var(--ice)', activeYearI
       const y = height - ((v - minV) / span) * (height - 8) - 4;
       return [x, y] as [number, number];
     });
-    return { pts, minV, maxV };
+    return { pts, minV, maxV, span };
   }, [data, height]);
 
   const histPts = pts.slice(0, HISTORY_END + 1);
@@ -51,97 +51,187 @@ export function LineChart({ data, height = 60, color = 'var(--ice)', activeYearI
   const cursorY = activeYearIdx !== undefined ? pts[activeYearIdx]?.[1] : null;
 
   // TASK-12 — annotation: delta% from first projection point to 2055 (index 45)
-  const baseVal   = data[HISTORY_END + 1] ?? data[HISTORY_END];
-  const val2055   = data[45];
-  const deltaPct  = baseVal > 0 ? ((val2055 - baseVal) / baseVal * 100) : 0;
-  const totalW    = 100 - PAD_LEFT - PAD_RIGHT;
-  const annX      = PAD_LEFT + (45 / (data.length - 1)) * totalW;
-  const annY      = pts[45]?.[1] ?? 20;
+  const baseVal  = data[HISTORY_END + 1] ?? data[HISTORY_END];
+  const val2055  = data[45];
+  const deltaPct = baseVal > 0 ? ((val2055 - baseVal) / baseVal * 100) : 0;
+  const totalW   = 100 - PAD_LEFT - PAD_RIGHT;
+  const annX     = PAD_LEFT + (45 / (data.length - 1)) * totalW; // in % of SVG width
+  const annY     = pts[45]?.[1] ?? 20;                           // in viewBox height units
 
   // Critical year: first year where data[i] < 0.7 * baseVal (for projection only)
   const critIdx = data.findIndex((v, i) => i > HISTORY_END && v < 0.7 * baseVal);
   const critX   = critIdx > 0 ? PAD_LEFT + (critIdx / (data.length - 1)) * totalW : null;
 
-  // Y axis ticks
-  const span = maxV - minV || 1;
+  // Y axis ticks — positions as % of height for HTML overlay
   const yTicks = [maxV, (maxV + minV) / 2, minV];
+  const yTickItems = yTicks.map(tick => ({
+    fmt: tick >= 1000 ? `${(tick / 1000).toFixed(0)}k` : tick.toFixed(0),
+    yPct: (height - ((tick - minV) / span) * (height - 8) - 4) / height * 100,
+    yPos: height - ((tick - minV) / span) * (height - 8) - 4,
+  }));
+
+  const annColor = deltaPct < 0 ? '#E5443A' : '#3AC58E';
 
   return (
-    <svg
-      viewBox={`0 0 100 ${height}`}
-      preserveAspectRatio="none"
-      style={{ width: '100%', height, display: 'block' }}
-    >
-      {/* Area fill under projection */}
-      <defs>
-        <linearGradient id={`area-grad-${color.replace(/[^a-z]/gi, '')}`} x1="0" x2="0" y1="0" y2="1">
-          <stop offset="0%" stopColor={color} stopOpacity="0.15" />
-          <stop offset="100%" stopColor={color} stopOpacity="0.02" />
-        </linearGradient>
-      </defs>
+    <div style={{ position: 'relative', height }}>
+      {/* SVG: only paths and lines — no text to avoid preserveAspectRatio="none" distortion */}
+      <svg
+        viewBox={`0 0 100 ${height}`}
+        preserveAspectRatio="none"
+        style={{ width: '100%', height, display: 'block', position: 'absolute', inset: 0 }}
+      >
+        <defs>
+          <linearGradient id={`area-grad-${color.replace(/[^a-z]/gi, '')}`} x1="0" x2="0" y1="0" y2="1">
+            <stop offset="0%" stopColor={color} stopOpacity="0.15" />
+            <stop offset="100%" stopColor={color} stopOpacity="0.02" />
+          </linearGradient>
+        </defs>
 
-      {/* TASK-13 — Y axis line + ticks + labels */}
-      <line x1={PAD_LEFT} y1={4} x2={PAD_LEFT} y2={height - 2} stroke="rgba(255,255,255,0.12)" strokeWidth="0.5" vectorEffect="non-scaling-stroke" />
-      {yTicks.map((tick, i) => {
-        const yPos = height - ((tick - minV) / span) * (height - 8) - 4;
-        const fmt = tick >= 1000 ? `${(tick / 1000).toFixed(0)}k` : tick.toFixed(0);
-        return (
-          <g key={i}>
-            <line x1={PAD_LEFT - 2} y1={yPos} x2={PAD_LEFT} y2={yPos} stroke="rgba(255,255,255,0.2)" strokeWidth="0.5" vectorEffect="non-scaling-stroke" />
-            <text x={PAD_LEFT - 3} y={yPos + 1.5} textAnchor="end" fontSize="4.5" fill="rgba(255,255,255,0.4)" fontFamily="JetBrains Mono, monospace">{fmt}</text>
-          </g>
-        );
-      })}
-      {unit && (
-        <text x={2} y={height / 2} textAnchor="middle" fontSize="4" fill="rgba(255,255,255,0.3)" fontFamily="Inter, sans-serif" transform={`rotate(-90, 5, ${height / 2})`}>{unit}</text>
-      )}
+        {/* Y axis line */}
+        <line x1={PAD_LEFT} y1={4} x2={PAD_LEFT} y2={height - 2} stroke="rgba(255,255,255,0.12)" strokeWidth="0.5" vectorEffect="non-scaling-stroke" />
 
-      {/* Area under projection */}
-      {projPts.length > 1 && (
-        <path
-          d={`${projPath} L ${projPts[projPts.length-1][0]} ${height} L ${projPts[0][0]} ${height} Z`}
-          fill={`url(#area-grad-${color.replace(/[^a-z]/gi, '')})`}
-        />
-      )}
+        {/* Y axis tick marks (short horizontal lines only, no text) */}
+        {yTickItems.map((t, i) => (
+          <line key={i} x1={PAD_LEFT - 2} y1={t.yPos} x2={PAD_LEFT} y2={t.yPos} stroke="rgba(255,255,255,0.2)" strokeWidth="0.5" vectorEffect="non-scaling-stroke" />
+        ))}
 
-      {/* History line */}
-      {histPath && <path d={histPath} fill="none" stroke={color} strokeWidth="1.5" opacity="0.9" vectorEffect="non-scaling-stroke" />}
+        {/* Area under projection */}
+        {projPts.length > 1 && (
+          <path
+            d={`${projPath} L ${projPts[projPts.length-1][0]} ${height} L ${projPts[0][0]} ${height} Z`}
+            fill={`url(#area-grad-${color.replace(/[^a-z]/gi, '')})`}
+          />
+        )}
 
-      {/* History/projection boundary */}
-      {histPts.length > 0 && (
-        <line x1={histPts[histPts.length-1][0]} y1={4} x2={histPts[histPts.length-1][0]} y2={height - 2}
-          stroke="rgba(255,255,255,0.15)" strokeWidth="0.5" strokeDasharray="2,2" vectorEffect="non-scaling-stroke" />
-      )}
+        {/* History line */}
+        {histPath && <path d={histPath} fill="none" stroke={color} strokeWidth="1.5" opacity="0.9" vectorEffect="non-scaling-stroke" />}
 
-      {/* Projection line */}
-      {projPath && <path d={projPath} fill="none" stroke={color} strokeWidth="1.5" strokeDasharray="4,3" opacity="0.65" vectorEffect="non-scaling-stroke" />}
+        {/* History/projection boundary */}
+        {histPts.length > 0 && (
+          <line
+            x1={histPts[histPts.length-1][0]} y1={4}
+            x2={histPts[histPts.length-1][0]} y2={height - 2}
+            stroke="rgba(255,255,255,0.15)" strokeWidth="0.5" strokeDasharray="2,2" vectorEffect="non-scaling-stroke"
+          />
+        )}
 
-      {/* TASK-12 — trend annotation at 2055 */}
-      {showAnnotation && Math.abs(deltaPct) > 1 && (
-        <g>
-          <line x1={annX} y1={annY - 6} x2={annX} y2={annY - 12} stroke={deltaPct < 0 ? '#E5443A' : '#3AC58E'} strokeWidth="0.7" vectorEffect="non-scaling-stroke" />
-          <text x={annX + 1} y={annY - 13} fontSize="4.5" fill={deltaPct < 0 ? '#E5443A' : '#3AC58E'} fontFamily="Inter, sans-serif" fontWeight="600">
-            {deltaPct > 0 ? '+' : ''}{deltaPct.toFixed(0)}% by 2055
-          </text>
-        </g>
-      )}
+        {/* Projection line */}
+        {projPath && <path d={projPath} fill="none" stroke={color} strokeWidth="1.5" strokeDasharray="4,3" opacity="0.65" vectorEffect="non-scaling-stroke" />}
 
-      {/* TASK-12 — critical year marker */}
-      {critX !== null && (
-        <g>
-          <line x1={critX} y1={4} x2={critX} y2={height - 2} stroke="var(--signal-danger)" strokeWidth="0.7" strokeDasharray="2,2" opacity="0.7" vectorEffect="non-scaling-stroke" />
-          <text x={critX + 1} y={8} fontSize="4" fill="var(--signal-danger)" fontFamily="Inter, sans-serif">critical</text>
-        </g>
-      )}
+        {/* Annotation stem line */}
+        {showAnnotation && Math.abs(deltaPct) > 1 && (
+          <line
+            x1={annX} y1={annY - 4} x2={annX} y2={annY - 10}
+            stroke={annColor} strokeWidth="0.7" vectorEffect="non-scaling-stroke"
+          />
+        )}
 
-      {/* Active year cursor */}
-      {cursorX !== null && cursorY !== null && (
-        <>
+        {/* Critical year dashed vertical */}
+        {critX !== null && (
+          <line
+            x1={critX} y1={4} x2={critX} y2={height - 2}
+            stroke="var(--signal-danger)" strokeWidth="0.7" strokeDasharray="2,2" opacity="0.7" vectorEffect="non-scaling-stroke"
+          />
+        )}
+
+        {/* Active year cursor line (stroke only — circle moved to HTML) */}
+        {cursorX !== null && (
           <line x1={cursorX} y1={4} x2={cursorX} y2={height - 2} stroke="var(--ice)" strokeWidth="0.8" opacity="0.7" vectorEffect="non-scaling-stroke" />
-          <circle cx={cursorX} cy={cursorY} r="2" fill="var(--ice)" opacity="0.9" vectorEffect="non-scaling-stroke" />
-        </>
+        )}
+      </svg>
+
+      {/* HTML overlay — text elements that must not stretch with SVG aspect ratio */}
+
+      {/* Unit label (rotated, far left) */}
+      {unit && (
+        <div style={{
+          position: 'absolute',
+          left: 0,
+          top: '50%',
+          width: 10,
+          transform: 'translateY(-50%) rotate(-90deg)',
+          transformOrigin: 'center center',
+          fontSize: 7,
+          color: 'rgba(255,255,255,0.3)',
+          fontFamily: 'var(--font-ui)',
+          whiteSpace: 'nowrap',
+          pointerEvents: 'none',
+          textAlign: 'center',
+        }}>
+          {unit}
+        </div>
       )}
-    </svg>
+
+      {/* Y-axis tick labels */}
+      {yTickItems.map((t, i) => (
+        <div key={i} style={{
+          position: 'absolute',
+          right: `${100 - (PAD_LEFT - 3)}%`,
+          top: `${t.yPct}%`,
+          transform: 'translateY(-50%)',
+          fontSize: 8,
+          lineHeight: 1,
+          color: 'rgba(255,255,255,0.45)',
+          fontFamily: 'var(--font-mono)',
+          whiteSpace: 'nowrap',
+          pointerEvents: 'none',
+          textAlign: 'right',
+          width: `${PAD_LEFT - 5}%`,
+        }}>
+          {t.fmt}
+        </div>
+      ))}
+
+      {/* Trend annotation label */}
+      {showAnnotation && Math.abs(deltaPct) > 1 && (
+        <div style={{
+          position: 'absolute',
+          left: `${annX}%`,
+          top: `${(annY - 14) / height * 100}%`,
+          transform: 'translateX(-50%)',
+          fontSize: 9,
+          fontWeight: 600,
+          color: annColor,
+          fontFamily: 'var(--font-ui)',
+          whiteSpace: 'nowrap',
+          pointerEvents: 'none',
+        }}>
+          {deltaPct > 0 ? '+' : ''}{deltaPct.toFixed(0)}% by 2055
+        </div>
+      )}
+
+      {/* Critical year label */}
+      {critX !== null && (
+        <div style={{
+          position: 'absolute',
+          left: `${critX + 0.5}%`,
+          top: 4,
+          fontSize: 8,
+          color: 'var(--signal-danger)',
+          fontFamily: 'var(--font-ui)',
+          whiteSpace: 'nowrap',
+          pointerEvents: 'none',
+        }}>
+          critical
+        </div>
+      )}
+
+      {/* Cursor circle — HTML so it stays round despite SVG non-uniform scaling */}
+      {cursorX !== null && cursorY !== null && (
+        <div style={{
+          position: 'absolute',
+          left: `${cursorX}%`,
+          top: `${(cursorY / height) * 100}%`,
+          width: 7,
+          height: 7,
+          borderRadius: '50%',
+          background: 'var(--ice)',
+          opacity: 0.9,
+          transform: 'translate(-50%, -50%)',
+          pointerEvents: 'none',
+        }} />
+      )}
+    </div>
   );
 }
 

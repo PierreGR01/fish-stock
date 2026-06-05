@@ -67,6 +67,7 @@ interface FishState {
   mapLayer: MapLayer;
   comparisonMode: boolean;
   mapScenario: ScenarioId;
+  selectedZone: 'A' | 'B' | 'C' | null;
 
   // — Saved scenarios (TASK-08) ——————————————
   savedScenarios: ScenarioEntry[];
@@ -103,6 +104,7 @@ interface FishState {
   setMapLayer: (l: MapLayer) => void;
   setComparisonMode: (v: boolean) => void;
   setMapScenario: (s: ScenarioId) => void;
+  setSelectedZone: (zone: 'A' | 'B' | 'C' | null) => void;
 
   saveCurrentScenario: (name: string) => void;
   loadSavedScenario: (id: string) => void;
@@ -141,6 +143,7 @@ export const useFishStore = create<FishState>((set, get) => ({
   mapLayer: 'biomass',
   comparisonMode: false,
   mapScenario: 'A',
+  selectedZone: null,
 
   savedScenarios: listScenarios(),
 
@@ -196,6 +199,7 @@ export const useFishStore = create<FishState>((set, get) => ({
   setMapLayer: (l) => set({ mapLayer: l }),
   setComparisonMode: (v) => set({ comparisonMode: v }),
   setMapScenario: (s) => set({ mapScenario: s }),
+  setSelectedZone: (zone) => set({ selectedZone: zone }),
 
   saveCurrentScenario: (name) => {
     const s = get();

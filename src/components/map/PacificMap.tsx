@@ -82,28 +82,32 @@ interface EezZone {
 // Real EEZ geometries from tuna-viewer.lab.dive.edito.eu/data/eez_reduced.json (MRGID source: MarineRegions)
 const EEZ_ZONES = eezZonesRaw as unknown as EezZone[];
 
+// ── Choropleth palette ────────────────────────────────────────────────────
+// min (#1a3a5c) → layer-specific max color
+const LAYER_MAX_RGB: Record<MapLayer, [number, number, number]> = {
+  biomass:     [58,  197, 142],  // #3ac58e
+  catch:       [229,  68,  58],  // #e5443a
+  recruitment: [245, 166,  35],  // #f5a623
+};
+const MIN_RGB: [number, number, number] = [26, 58, 92]; // #1a3a5c
 
 // Each zone starts at a distinct base and follows its own trajectory per layer.
-// val=1 → deep green (healthy/low-pressure), val=0 → deep red (critical/high-pressure).
+// val=1 → max color (healthy/low-pressure), val=0 → deep navy (critical/high-pressure).
 function heatColor(zoneId: string, year: number, layer: MapLayer, scenario: 'A' | 'B'): string {
   const t = (year - 2026) / (2099 - 2026);
   const sA = scenario === 'A';
 
-  // { base at 2026,  trend over 2026-2099 }
   const cfg: Record<MapLayer, Record<string, [number, number]>> = {
-    // Biomass = stock health index. A well-managed, B overfished, C critically low.
     biomass: {
       A: [0.82, sA ? -0.40 : 0.12],
       B: [0.54, sA ? -0.52 : 0.22],
       C: [0.36, sA ? -0.33 : 0.10],
     },
-    // Catch pressure = intensity relative to sustainable yield. C heavily fished.
     catch: {
       A: [0.68, sA ? -0.18 : -0.06],
       B: [0.58, sA ? -0.25 : 0.28],
       C: [0.82, sA ? -0.08 : 0.04],
     },
-    // Recruitment = juvenile success, sensitive to SST rise. B highest, C weakest.
     recruitment: {
       A: [0.62, sA ? -0.58 : 0.16],
       B: [0.76, sA ? -0.44 : 0.18],
@@ -114,14 +118,24 @@ function heatColor(zoneId: string, year: number, layer: MapLayer, scenario: 'A' 
   const [base, trend] = cfg[layer]?.[zoneId] ?? [0.6, -0.3];
   const val = Math.max(0, Math.min(1, base + trend * t));
 
-  if (val >= 0.5) {
-    const s = (val - 0.5) * 2;
-    return `rgb(${Math.round(58+(229-58)*(1-s))},${Math.round(197+(68-197)*(1-s))},${Math.round(142+(58-142)*(1-s))})`;
-  } else {
-    const s = val * 2;
-    return `rgb(${Math.round(229+(242-229)*s)},${Math.round(68+(169-68)*s)},${Math.round(58+(59-58)*s)})`;
-  }
+  const maxRgb = LAYER_MAX_RGB[layer];
+  const r = Math.round(MIN_RGB[0] + (maxRgb[0] - MIN_RGB[0]) * val);
+  const g = Math.round(MIN_RGB[1] + (maxRgb[1] - MIN_RGB[1]) * val);
+  const b = Math.round(MIN_RGB[2] + (maxRgb[2] - MIN_RGB[2]) * val);
+  return `rgb(${r},${g},${b})`;
 }
+
+// ── Legend metadata ───────────────────────────────────────────────────────
+const LAYER_MAX_HEX: Record<MapLayer, string> = {
+  biomass:     '#3ac58e',
+  catch:       '#e5443a',
+  recruitment: '#f5a623',
+};
+const LEGEND_INFO: Record<MapLayer, { label: string; min: string; max: string }> = {
+  biomass:     { label: 'Biomass · t/km²',  min: '40',  max: '140' },
+  catch:       { label: 'Catch · t/yr',     min: '10k', max: '50k' },
+  recruitment: { label: 'Recruitment · idx', min: '0.2', max: '1.0' },
+};
 
 const WMTS = 'https://wmts.marine.copernicus.eu/teroWmts'
 
@@ -195,13 +209,13 @@ export function PacificMap({ phase }: Props) {
   const compMode          = useFishStore(s => s.comparisonMode);
   const layerSST          = useFishStore(s => s.layerSST);
   const layerPlankton     = useFishStore(s => s.layerPlankton);
+  const selectedZone      = useFishStore(s => s.selectedZone);
   const setCustomClosureZone = useFishStore(s => s.setCustomClosureZone);
   const setDrawingZone       = useFishStore(s => s.setDrawingZone);
   const setLayerSST          = useFishStore(s => s.setLayerSST);
   const setLayerCurrents     = useFishStore(s => s.setLayerCurrents);
   const setLayerPlankton     = useFishStore(s => s.setLayerPlankton);
 
-  // Refs for popup content (avoid stale closures in event handlers)
   const scenario: 'A' | 'B' = phase === 'decide' && compMode ? mapScenario : 'A';
   const isDecide = phase === 'decide';
 
@@ -243,13 +257,16 @@ export function PacificMap({ phase }: Props) {
         if (err.sourceId === 'plankton-wms') setPlanktonUnavailable(true);
       });
 
-      // ── Fishery super-zones ────────────────────────────────────────────────
-      map.addSource('fisheries', { type: 'geojson', data: { type: 'FeatureCollection', features: FISHERY_FEATURES } });
+      // ── Fishery super-zones (promoteId uses 'id' property for feature-state) ──
+      map.addSource('fisheries', {
+        type: 'geojson',
+        data: { type: 'FeatureCollection', features: FISHERY_FEATURES },
+        promoteId: 'id',
+      });
       map.addLayer({ id: 'fisheries-fill', type: 'fill', source: 'fisheries', paint: {
         'fill-color': ['get', 'color'],
         'fill-opacity': ['get', 'opacity'],
       }});
-      // Dark casing behind the dashed outline ensures contrast on any background (SST/Plankton brighten the basemap)
       map.addLayer({ id: 'fisheries-outline-casing', type: 'line', source: 'fisheries', paint: {
         'line-color': '#0A1428',
         'line-width': 3.5,
@@ -262,11 +279,15 @@ export function PacificMap({ phase }: Props) {
         'line-dasharray': [4, 2],
       }});
 
-      // ── Heatmap overlay ────────────────────────────────────────────────────
-      map.addSource('heatmap', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
+      // ── Heatmap overlay (promoteId for feature-state dimming) ─────────────
+      map.addSource('heatmap', {
+        type: 'geojson',
+        data: { type: 'FeatureCollection', features: [] },
+        promoteId: 'id',
+      });
       map.addLayer({ id: 'heatmap-fill', type: 'fill', source: 'heatmap', paint: { 'fill-color': ['get', 'heatColor'], 'fill-opacity': 0.45 } });
 
-      // ── EEZ zones (on top of fishery zones and rasters) ───────────────────
+      // ── EEZ zones ─────────────────────────────────────────────────────────
       let hoveredEezId: number | null = null;
       const eezInitial: GeoJSON.Feature[] = EEZ_ZONES.map((z, idx) => ({
         type: 'Feature' as const,
@@ -319,13 +340,13 @@ export function PacificMap({ phase }: Props) {
         },
       });
 
-      // ── Closures (on top of EEZ and fishery zones) ─────────────────────────
+      // ── Closures ──────────────────────────────────────────────────────────
       map.addSource('closures', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
       map.addLayer({ id: 'closures-fill', type: 'fill', source: 'closures', paint: { 'fill-color': '#E5443A', 'fill-opacity': 0.18 } });
       map.addLayer({ id: 'closures-line-casing', type: 'line', source: 'closures', paint: { 'line-color': '#0A1428', 'line-width': 4.5, 'line-opacity': 0.65 } });
       map.addLayer({ id: 'closures-line', type: 'line', source: 'closures', paint: { 'line-color': '#E5443A', 'line-width': 2.5, 'line-dasharray': [3, 2] } });
 
-      // ── Zone labels (top of stack so always readable) ─────────────────────
+      // ── Zone labels ───────────────────────────────────────────────────────
       map.addSource('fishery-labels', { type: 'geojson', data: { type: 'FeatureCollection', features: [
         { type: 'Feature', properties: { label: 'A · West Pacific', color: '#4DA8DA' }, geometry: { type: 'Point', coordinates: [155, 3] } },
         { type: 'Feature', properties: { label: 'B · Central', color: '#3AC58E' }, geometry: { type: 'Point', coordinates: [-155, 3] } },
@@ -333,14 +354,37 @@ export function PacificMap({ phase }: Props) {
       ]}});
       map.addLayer({ id: 'fishery-labels', type: 'symbol', source: 'fishery-labels', layout: { 'text-field': ['get', 'label'], 'text-font': ['Open Sans Bold', 'Arial Unicode MS Bold'], 'text-size': 11, 'text-anchor': 'center' }, paint: { 'text-color': ['get', 'color'], 'text-halo-color': '#0A1428', 'text-halo-width': 2 } });
 
+      // ── Selected zone glow (above heatmap, below labels) ──────────────────
+      map.addSource('fisheries-selected', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
+      map.addLayer({
+        id: 'fisheries-selected-glow',
+        type: 'line',
+        source: 'fisheries-selected',
+        paint: {
+          'line-color': ['get', 'color'],
+          'line-width': 5,
+          'line-opacity': 0.55,
+          'line-blur': 4,
+        },
+      }, 'fishery-labels');
+      map.addLayer({
+        id: 'fisheries-selected-outline',
+        type: 'line',
+        source: 'fisheries-selected',
+        paint: {
+          'line-color': ['get', 'color'],
+          'line-width': 2.5,
+          'line-opacity': 1.0,
+        },
+      }, 'fishery-labels');
+
       // ── Drawing preview ────────────────────────────────────────────────────
       map.addSource('draw-preview', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
       map.addLayer({ id: 'draw-fill', type: 'fill', source: 'draw-preview', filter: ['==', ['get', 'type'], 'fill'], paint: { 'fill-color': '#E5443A', 'fill-opacity': 0.10 } });
       map.addLayer({ id: 'draw-line', type: 'line', source: 'draw-preview', filter: ['any', ['==', ['get', 'type'], 'line'], ['==', ['get', 'type'], 'fill']], paint: { 'line-color': '#E5443A', 'line-width': 2, 'line-dasharray': [4, 2] } });
       map.addLayer({ id: 'draw-points', type: 'circle', source: 'draw-preview', filter: ['==', ['get', 'type'], 'point'], paint: { 'circle-radius': 5, 'circle-color': '#E5443A', 'circle-stroke-color': '#fff', 'circle-stroke-width': 1.5 } });
 
-      // ── Hover handlers ─────────────────────────────────────────────────────
-
+      // ── EEZ hover handlers ────────────────────────────────────────────────
       const eezPopup = new maplibregl.Popup({ closeButton: false, closeOnClick: false, offset: 8 });
       const showEezPopup = (e: maplibregl.MapMouseEvent & { features?: maplibregl.MapGeoJSONFeature[] }) => {
         if (!e.features?.length) return;
@@ -378,18 +422,39 @@ export function PacificMap({ phase }: Props) {
         useFishStore.getState().toggleClosure(name);
       });
 
-      applyState(map, closures, customClosureZone, isDecide, activeYear, mapLayer, scenario);
+      // ── Fishery zone click (decide phase only) ────────────────────────────
+      map.on('mouseenter', 'fisheries-fill', () => {
+        if (useFishStore.getState().phase === 'decide') {
+          map.getCanvas().style.cursor = 'pointer';
+        }
+      });
+      map.on('mouseleave', 'fisheries-fill', () => {
+        if (useFishStore.getState().phase === 'decide') {
+          map.getCanvas().style.cursor = '';
+        }
+      });
+      map.on('click', 'fisheries-fill', (e) => {
+        if (useFishStore.getState().phase !== 'decide') return;
+        if (!e.features?.length) return;
+        const zoneId = e.features[0].properties?.id as 'A' | 'B' | 'C';
+        const store = useFishStore.getState();
+        store.setSelectedZone(store.selectedZone === zoneId ? null : zoneId);
+        e.originalEvent.stopPropagation();
+      });
+
+      const { selectedZone: initZone } = useFishStore.getState();
+      applyState(map, closures, customClosureZone, isDecide, activeYear, mapLayer, scenario, initZone);
     });
 
     return () => { map.remove(); mapRef.current = null; readyRef.current = false; };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // ── Reactive: closures + heatmap ──────────────────────────────────────────
+  // ── Reactive: closures + heatmap + selectedZone ───────────────────────────
   useEffect(() => {
     if (!readyRef.current || !mapRef.current) return;
-    applyState(mapRef.current, closures, customClosureZone, isDecide, activeYear, mapLayer, scenario);
-  }, [closures, customClosureZone, isDecide, activeYear, mapLayer, scenario]);
+    applyState(mapRef.current, closures, customClosureZone, isDecide, activeYear, mapLayer, scenario, selectedZone);
+  }, [closures, customClosureZone, isDecide, activeYear, mapLayer, scenario, selectedZone]);
 
   // ── Reactive: WMS visibility + opacity ───────────────────────────────────
   useEffect(() => {
@@ -415,7 +480,7 @@ export function PacificMap({ phase }: Props) {
       mapRef.current.setPaintProperty('plankton-layer', 'raster-opacity', opacityPlankton);
   }, [opacityPlankton]);
 
-  // ── Reactive: drawing zone (TASK-05) ─────────────────────────────────────
+  // ── Reactive: drawing zone ────────────────────────────────────────────────
   useEffect(() => {
     if (!readyRef.current || !mapRef.current) return;
     const map = mapRef.current;
@@ -461,6 +526,9 @@ export function PacificMap({ phase }: Props) {
     }
   };
 
+  const legendInfo = LEGEND_INFO[mapLayer];
+  const legendMaxColor = LAYER_MAX_HEX[mapLayer];
+
   return (
     <div style={{ position: 'relative', flex: 1, overflow: 'hidden' }}>
       <div ref={containerRef} style={{ position: 'absolute', inset: 0 }} />
@@ -478,7 +546,7 @@ export function PacificMap({ phase }: Props) {
           : 'Pacific Ocean — equatorial view'}
       </div>
 
-      {/* Drawing mode overlay (TASK-05) */}
+      {/* Drawing mode overlay */}
       {drawingZone && (
         <div style={{
           position: 'absolute', inset: 0, border: '2px dashed var(--signal-info)',
@@ -521,6 +589,31 @@ export function PacificMap({ phase }: Props) {
           pointerEvents: 'none', zIndex: 5, whiteSpace: 'nowrap',
         }}>
           Projection data: mock — will be replaced by SEAPODYM via EDITO API
+        </div>
+      )}
+
+      {/* P2 — Colorimetric legend (decide phase only) */}
+      {isDecide && (
+        <div style={{
+          position: 'absolute', bottom: 36, left: 12, zIndex: 10,
+          background: 'rgba(10,20,40,0.82)', border: '1px solid var(--ink-500)',
+          borderRadius: 'var(--radius-sm)', padding: '6px 10px', pointerEvents: 'none',
+        }}>
+          <div style={{
+            fontFamily: 'var(--font-ui)', fontSize: 8, textTransform: 'uppercase',
+            letterSpacing: '0.5px', color: 'var(--text-mid)', marginBottom: 4,
+          }}>
+            {legendInfo.label}
+          </div>
+          <div style={{
+            width: 120, height: 12, borderRadius: 2,
+            background: `linear-gradient(to right, #1a3a5c, ${legendMaxColor})`,
+            marginBottom: 3,
+          }} />
+          <div style={{ display: 'flex', justifyContent: 'space-between', width: 120 }}>
+            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--text-lo)' }}>{legendInfo.min}</span>
+            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--text-lo)' }}>{legendInfo.max}</span>
+          </div>
         </div>
       )}
 
@@ -579,7 +672,6 @@ function LayerToggles({
         Data layers
       </div>
 
-      {/* SST */}
       <LayerToggleRow label="SST" on={layerSST} unavailable={sstUnavailable} onToggle={onToggleSST} />
       {layerSST && !sstUnavailable && (
         <div style={{ marginBottom: 6, marginTop: 2 }}>
@@ -592,10 +684,8 @@ function LayerToggles({
         </div>
       )}
 
-      {/* Currents */}
       <LayerToggleRow label="Currents" on={layerCurrents} unavailable={false} onToggle={onToggleCurrents} />
 
-      {/* Plankton */}
       <div style={{ marginTop: layerCurrents ? 0 : 0 }}>
         <LayerToggleRow label="Plankton" on={layerPlankton} unavailable={planktonUnavailable} onToggle={onTogglePlankton} />
         {layerPlankton && !planktonUnavailable && (
@@ -664,8 +754,8 @@ function applyState(
   activeYear: number,
   mapLayer: MapLayer,
   scenario: 'A' | 'B',
+  selectedZone: 'A' | 'B' | 'C' | null,
 ) {
-  // Update each EEZ zone with its open/closed state (preserve numeric id for feature-state hover)
   const eezFeatures: GeoJSON.Feature[] = EEZ_ZONES.map((z, idx) => ({
     type: 'Feature' as const,
     id: idx,
@@ -674,7 +764,6 @@ function applyState(
   }));
   (map.getSource('eez-zones') as maplibregl.GeoJSONSource)?.setData({ type: 'FeatureCollection', features: eezFeatures });
 
-  // TASK-05: custom drawn zone only (EEZ zones now handled by eez-zones source)
   const customFeatures: GeoJSON.Feature[] = customZone
     ? [{ type: 'Feature' as const, properties: { eez: 'custom' }, geometry: customZone }]
     : [];
@@ -685,11 +774,45 @@ function applyState(
       ...f, properties: { ...f.properties, heatColor: heatColor(f.properties!.id as string, activeYear, mapLayer, scenario) },
     }));
     (map.getSource('heatmap') as maplibregl.GeoJSONSource)?.setData({ type: 'FeatureCollection', features: heatFeatures });
-    map.setPaintProperty('fisheries-fill', 'fill-opacity', ['case', ['boolean', ['feature-state', 'hover'], false], 0.20, 0.06]);
-    map.setPaintProperty('heatmap-fill', 'fill-opacity', 0.45);
+
+    // Feature-state dimming for selection
+    const hasSelection = selectedZone !== null;
+    FISHERY_FEATURES.forEach(f => {
+      const zoneId = f.properties!.id as string;
+      const dimmed = hasSelection && zoneId !== selectedZone;
+      map.setFeatureState({ source: 'fisheries', id: zoneId }, { dimmed });
+      map.setFeatureState({ source: 'heatmap', id: zoneId }, { dimmed });
+    });
+
+    // Selected zone glow source
+    const selFeature = selectedZone
+      ? FISHERY_FEATURES.find(f => f.properties?.id === selectedZone) ?? null
+      : null;
+    (map.getSource('fisheries-selected') as maplibregl.GeoJSONSource)?.setData({
+      type: 'FeatureCollection', features: selFeature ? [selFeature] : [],
+    });
+
+    // Paint expressions using feature-state
+    map.setPaintProperty('fisheries-fill', 'fill-opacity', [
+      'case',
+      ['boolean', ['feature-state', 'dimmed'], false], 0.01,
+      ['case', ['boolean', ['feature-state', 'hover'], false], 0.20, 0.06],
+    ]);
+    map.setPaintProperty('heatmap-fill', 'fill-opacity', [
+      'case', ['boolean', ['feature-state', 'dimmed'], false], 0.12, 0.45,
+    ]);
+    map.setPaintProperty('fisheries-outline', 'line-opacity', [
+      'case', ['boolean', ['feature-state', 'dimmed'], false], 0.18, 0.85,
+    ]);
+    map.setPaintProperty('fisheries-outline-casing', 'line-opacity', [
+      'case', ['boolean', ['feature-state', 'dimmed'], false], 0.08, 0.65,
+    ]);
   } else {
     (map.getSource('heatmap') as maplibregl.GeoJSONSource)?.setData({ type: 'FeatureCollection', features: [] });
+    (map.getSource('fisheries-selected') as maplibregl.GeoJSONSource)?.setData({ type: 'FeatureCollection', features: [] });
     map.setPaintProperty('fisheries-fill', 'fill-opacity', ['case', ['boolean', ['feature-state', 'hover'], false], 0.35, ['get', 'opacity']]);
     map.setPaintProperty('heatmap-fill', 'fill-opacity', 0);
+    map.setPaintProperty('fisheries-outline', 'line-opacity', 0.85);
+    map.setPaintProperty('fisheries-outline-casing', 'line-opacity', 0.65);
   }
 }
