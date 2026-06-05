@@ -9,6 +9,7 @@ export type CatchMode = 'constant' | 'per-year' | 'increasing' | 'decreasing';
 export type Level = 'low' | 'medium' | 'high';
 export type MapLayer = 'biomass' | 'catch' | 'recruitment';
 export type ScenarioId = 'A' | 'B';
+export type KPIsResult = { v2055: number; v2099: number; d2055: number; d2099: number; critYear: number | null };
 
 // TASK-17 — Scientifically improved simulation messages
 const SIM_MESSAGES = [
@@ -65,9 +66,11 @@ interface FishState {
   playing: boolean;
   playSpeed: 1 | 2 | 4;
   mapLayer: MapLayer;
+  featuredSeries: MapLayer;
   comparisonMode: boolean;
   mapScenario: ScenarioId;
   selectedZone: 'A' | 'B' | 'C' | null;
+  kpis: KPIsResult | null;
 
   // — Saved scenarios (TASK-08) ——————————————
   savedScenarios: ScenarioEntry[];
@@ -102,9 +105,11 @@ interface FishState {
   setPlaying: (v: boolean) => void;
   setPlaySpeed: (s: 1 | 2 | 4) => void;
   setMapLayer: (l: MapLayer) => void;
+  setFeaturedSeries: (s: MapLayer) => void;
   setComparisonMode: (v: boolean) => void;
   setMapScenario: (s: ScenarioId) => void;
   setSelectedZone: (zone: 'A' | 'B' | 'C' | null) => void;
+  setKpis: (k: KPIsResult | null) => void;
 
   saveCurrentScenario: (name: string) => void;
   loadSavedScenario: (id: string) => void;
@@ -141,9 +146,11 @@ export const useFishStore = create<FishState>((set, get) => ({
   playing: false,
   playSpeed: 1,
   mapLayer: 'biomass',
+  featuredSeries: 'biomass',
   comparisonMode: false,
   mapScenario: 'A',
   selectedZone: null,
+  kpis: null,
 
   savedScenarios: listScenarios(),
 
@@ -196,10 +203,12 @@ export const useFishStore = create<FishState>((set, get) => ({
   setActiveYear: (y) => set({ activeYear: Math.max(YEAR_MIN, Math.min(YEAR_MAX, y)) }),
   setPlaying: (v) => set({ playing: v }),
   setPlaySpeed: (s) => set({ playSpeed: s }),
-  setMapLayer: (l) => set({ mapLayer: l }),
+  setMapLayer: (l) => set({ mapLayer: l, featuredSeries: l }),
+  setFeaturedSeries: (s) => set({ featuredSeries: s, mapLayer: s }),
   setComparisonMode: (v) => set({ comparisonMode: v }),
   setMapScenario: (s) => set({ mapScenario: s }),
   setSelectedZone: (zone) => set({ selectedZone: zone }),
+  setKpis: (k) => set({ kpis: k }),
 
   saveCurrentScenario: (name) => {
     const s = get();
