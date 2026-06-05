@@ -2,7 +2,8 @@ import { useEffect, useRef } from 'react';
 import maplibregl from 'maplibre-gl';
 import { useFishStore } from '../../store/fishStore';
 
-type Particle = { lon: number; lat: number; age: number };
+type TrailPoint = { lon: number; lat: number };
+type Particle   = { lon: number; lat: number; age: number; trail: TrailPoint[] };
 
 type CurrentGrid = {
   lats: number[];
@@ -89,16 +90,13 @@ function bilinearUV(grid: CurrentGrid, lon360d: number, lat: number): [number, n
 }
 
 // ── Static geographic land mask ────────────────────────────────────────────
-// Resolution: ~2° lon × ~3° lat over the Pacific bbox.
-// Uses bounding boxes for major land masses — deterministic, synchronous,
-// no viewport dependency (replaces the fragile queryRenderedFeatures approach).
 const MASK_COLS = 90;
 const MASK_ROWS = 42;
 
 // [lonMin360, lonMax360, latMin, latMax]
 const LAND_BOXES: [number, number, number, number][] = [
   [100, 123,  20,  65],  // China, Russian Far East
-  [100, 117,   0,  25],  // SE Asia mainland (Vietnam, Thailand, Myanmar…)
+  [100, 117,   0,  25],  // SE Asia mainland
   [129, 146,  30,  46],  // Japan
   [126, 131,  34,  39],  // Korean Peninsula
   [117, 127,   5,  21],  // Philippines
@@ -106,13 +104,13 @@ const LAND_BOXES: [number, number, number, number][] = [
   [140, 152, -10,   0],  // Papua New Guinea
   [113, 155, -39, -11],  // Australia
   [166, 179, -47, -34],  // New Zealand
-  [193, 240,  54,  72],  // Alaska Peninsula + southern Alaska coast
-  [234, 275,  14,  72],  // North America (Pacific coast → bbox east edge)
-  [258, 275,   8,  22],  // Mexico & Central America isthmus
+  [193, 240,  54,  72],  // Alaska Peninsula
+  [234, 275,  14,  72],  // North America (Pacific coast)
+  [258, 275,   8,  22],  // Mexico & Central America
 ];
 
 function buildLandMask(): Uint8Array {
-  const mask = new Uint8Array(MASK_COLS * MASK_ROWS).fill(1); // default: ocean
+  const mask = new Uint8Array(MASK_COLS * MASK_ROWS).fill(1);
   const lonRange = LON_MAX_360 - LON_MIN_360;
   const latRange = LAT_MAX - LAT_MIN;
   for (let row = 0; row < MASK_ROWS; row++) {
@@ -122,7 +120,7 @@ function buildLandMask(): Uint8Array {
       if (LAND_BOXES.some(([l0, l1, la0, la1]) =>
         lon360d >= l0 && lon360d <= l1 && lat >= la0 && lat <= la1)
       ) {
-        mask[row * MASK_COLS + col] = 0; // land
+        mask[row * MASK_COLS + col] = 0;
       }
     }
   }
@@ -137,14 +135,19 @@ function maskIsOcean(mask: Uint8Array, lon360d: number, lat: number): boolean {
   return mask[r * MASK_COLS + c] === 1;
 }
 
-// ── Particle bbox and animation constants ─────────────────────────────────
+// ── Constants ─────────────────────────────────────────────────────────────
 const LON_MIN_360 = 100;
 const LON_MAX_360 = 275;
 const LAT_MIN = -60;
 const LAT_MAX = 65;
 const SPEED = 0.25;
-const N_PARTICLES = 1000;
-const MAX_AGE = 6;
+const N_PARTICLES = 800;
+// How long a particle lives (seconds). Long enough to build a full trail.
+const MAX_AGE = 90;
+// Number of geographic positions to keep in each particle's trail history.
+const MAX_TRAIL = 90;
+// Sample a trail position every N animation frames (avoids storing duplicates at 60 fps).
+const TRAIL_SAMPLE = 2;
 
 function lon360(lon: number): number {
   return lon < 0 ? lon + 360 : lon;
@@ -156,7 +159,7 @@ function normLon(lon: number): number {
   return lon;
 }
 
-// Synthetic fallback during grid fetch
+// Synthetic fallback while the real grid is loading
 function currentAt(lon360d: number, lat: number): [number, number] {
   const latR = lat * Math.PI / 180;
   const lonR = lon360d * Math.PI / 180;
@@ -170,7 +173,6 @@ function currentAt(lon360d: number, lat: number): [number, number] {
   return [u, v];
 }
 
-// Built once at module load — pure geographic data, no map/async needed
 const OCEAN_MASK = buildLandMask();
 
 function randomParticle(age?: number): Particle {
@@ -178,11 +180,11 @@ function randomParticle(age?: number): Particle {
     const lon360d = LON_MIN_360 + Math.random() * (LON_MAX_360 - LON_MIN_360);
     const lat = LAT_MIN + Math.random() * (LAT_MAX - LAT_MIN);
     if (!maskIsOcean(OCEAN_MASK, lon360d, lat)) continue;
-    return { lon: normLon(lon360d), lat, age: age ?? Math.random() * MAX_AGE };
+    return { lon: normLon(lon360d), lat, age: age ?? Math.random() * MAX_AGE, trail: [] };
   }
   const lon360d = LON_MIN_360 + Math.random() * (LON_MAX_360 - LON_MIN_360);
   const lat = LAT_MIN + Math.random() * (LAT_MAX - LAT_MIN);
-  return { lon: normLon(lon360d), lat, age: age ?? Math.random() * MAX_AGE };
+  return { lon: normLon(lon360d), lat, age: age ?? Math.random() * MAX_AGE, trail: [] };
 }
 
 function generateParticles(): Particle[] {
@@ -200,12 +202,12 @@ export function CurrentsLayer({ mapRef }: Props) {
 
   const canvasRef    = useRef<HTMLCanvasElement>(null);
   const particlesRef = useRef<Particle[]>(generateParticles());
-  const gridRef = useRef<CurrentGrid | null>(null);
+  const gridRef      = useRef<CurrentGrid | null>(null);
 
   useEffect(() => {
     fetchCurrentGrid()
       .then(g => { gridRef.current = g; })
-      .catch(() => { /* fallback silencieux sur courants synthétiques */ });
+      .catch(() => { /* silent fallback to synthetic currents */ });
   }, []);
 
   useEffect(() => {
@@ -217,6 +219,7 @@ export function CurrentsLayer({ mapRef }: Props) {
     let rafId = 0;
     let syncCb: (() => void) | null = null;
     let lastTime = 0;
+    let frameCount = 0;
 
     const startAnimation = (map: maplibregl.Map) => {
       const syncSize = () => {
@@ -224,12 +227,14 @@ export function CurrentsLayer({ mapRef }: Props) {
         const w = mc.offsetWidth;
         const h = mc.offsetHeight;
         if (w > 0 && h > 0) {
-          canvas.width = w;
+          // Setting canvas dimensions clears the canvas — that's fine because
+          // we rebuild the full scene from geographic coordinates every frame.
+          canvas.width  = w;
           canvas.height = h;
-          canvas.style.width = `${w}px`;
+          canvas.style.width  = `${w}px`;
           canvas.style.height = `${h}px`;
           canvas.style.left = '0';
-          canvas.style.top = '0';
+          canvas.style.top  = '0';
         }
       };
 
@@ -242,35 +247,43 @@ export function CurrentsLayer({ mapRef }: Props) {
         const w = mc.offsetWidth;
         const h = mc.offsetHeight;
         if (w > 0 && h > 0 && (canvas.width !== w || canvas.height !== h)) {
-          canvas.width = w;
+          canvas.width  = w;
           canvas.height = h;
-          canvas.style.width = `${w}px`;
+          canvas.style.width  = `${w}px`;
           canvas.style.height = `${h}px`;
         }
 
         const dt = lastTime ? Math.min((time - lastTime) / 1000, 0.1) : 0;
         lastTime = time;
 
+        // Always clear the full canvas. The scene is rebuilt every frame from
+        // geographic coordinates, so pan/zoom never corrupts the trail.
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
         if (!visibleRef.current || canvas.width === 0 || canvas.height === 0) {
-          ctx.clearRect(0, 0, canvas.width, canvas.height);
           rafId = requestAnimationFrame(animate);
           return;
         }
 
-        ctx.globalCompositeOperation = 'destination-out';
-        ctx.fillStyle = 'rgba(0, 0, 0, 0.20)';
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
         ctx.globalCompositeOperation = 'source-over';
 
         for (const p of particles) {
           const l360cur = lon360(p.lon);
 
-          // Land mask check: reset immediately if on land
+          // Reset immediately if on land
           if (!maskIsOcean(OCEAN_MASK, l360cur, p.lat)) {
             Object.assign(p, randomParticle(0));
             continue;
           }
 
+          // Sample a geographic trail position every TRAIL_SAMPLE frames so the
+          // stored history spans real distance rather than tiny sub-pixel moves.
+          if (frameCount % TRAIL_SAMPLE === 0) {
+            p.trail.push({ lon: p.lon, lat: p.lat });
+            if (p.trail.length > MAX_TRAIL) p.trail.shift();
+          }
+
+          // Advect
           const [u, v] = gridRef.current
             ? bilinearUV(gridRef.current, l360cur, p.lat)
             : currentAt(l360cur, p.lat);
@@ -279,37 +292,56 @@ export function CurrentsLayer({ mapRef }: Props) {
           p.lat += v * SPEED * dt;
           p.age += dt;
 
+          // Reset if out of bounds or too old
           const l360 = lon360(p.lon);
-          const outOfBounds = l360 > LON_MAX_360 || l360 < LON_MIN_360
-            || p.lat > LAT_MAX || p.lat < LAT_MIN;
-          if (outOfBounds || p.age > MAX_AGE) {
+          if (l360 > LON_MAX_360 || l360 < LON_MIN_360 || p.lat > LAT_MAX || p.lat < LAT_MIN || p.age > MAX_AGE) {
             Object.assign(p, randomParticle(0));
             continue;
           }
 
+          // Fade in at birth, fade out near death
           const lifeRatio = p.age / MAX_AGE;
-          const alpha = lifeRatio < 0.1
-            ? lifeRatio / 0.1
-            : lifeRatio > 0.85
-              ? (1 - lifeRatio) / 0.15
+          const lifeAlpha = lifeRatio < 0.05
+            ? lifeRatio / 0.05
+            : lifeRatio > 0.88
+              ? (1 - lifeRatio) / 0.12
               : 1;
 
-          ctx.globalAlpha = alpha * 0.75;
-          ctx.fillStyle = '#A8D8E8';
+          // ── Draw trail (geographic history → re-project each frame) ──────
+          // Oldest point has low alpha, newest has high alpha.
+          const tLen = p.trail.length;
+          for (let ti = 0; ti < tLen; ti++) {
+            const tp = p.trail[ti];
+            // ti=0 is oldest; ramp from 0.03 to 0.65
+            const trailRatio = (ti + 1) / tLen;
+            const trailAlpha = (0.03 + trailRatio * 0.62) * lifeAlpha;
 
-          // Render at lon, lon-360 and lon+360 so particles appear on every
-          // world-copy that MapLibre shows when zoomed out (world-wrap).
+            for (const wlon of [tp.lon, tp.lon - 360, tp.lon + 360]) {
+              const px = map.project([wlon, tp.lat]);
+              if (px.x < -4 || px.x > canvas.width + 4) continue;
+              if (px.y < -4 || px.y > canvas.height + 4) continue;
+              ctx.globalAlpha = trailAlpha;
+              ctx.fillStyle = '#7EC8E3';
+              // fillRect is ~3× faster than arc for small dots
+              ctx.fillRect(px.x - 0.5, px.y - 0.5, 1, 1);
+            }
+          }
+
+          // ── Draw particle head (brighter, slightly larger) ───────────────
           for (const wlon of [p.lon, p.lon - 360, p.lon + 360]) {
             const px = map.project([wlon, p.lat]);
-            if (px.x < -2 || px.x > canvas.width + 2) continue;
-            if (px.y < -2 || px.y > canvas.height + 2) continue;
+            if (px.x < -3 || px.x > canvas.width + 3) continue;
+            if (px.y < -3 || px.y > canvas.height + 3) continue;
+            ctx.globalAlpha = lifeAlpha * 0.95;
+            ctx.fillStyle = '#D4F0FF';
             ctx.beginPath();
-            ctx.arc(px.x, px.y, 1.0, 0, Math.PI * 2);
+            ctx.arc(px.x, px.y, 1.1, 0, Math.PI * 2);
             ctx.fill();
           }
         }
-        ctx.globalAlpha = 1;
 
+        ctx.globalAlpha = 1;
+        frameCount++;
         rafId = requestAnimationFrame(animate);
       };
 
