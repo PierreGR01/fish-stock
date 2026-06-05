@@ -14,7 +14,7 @@ function wave(i: number, freq: number, phase: number): number {
 export const BIOMASS_A: number[] = YEARS.map((_, i) => {
   const base = 100;
   const hist = i <= HISTORY_END ? wave(i, 0.6, 0) * 5 + wave(i, 0.25, 1) * 3 : 0;
-  const proj = i > HISTORY_END ? -0.32 * (i - HISTORY_END) + wave(i, 0.4, 0.5) * 4 : 0;
+  const proj = i > HISTORY_END ? -0.68 * (i - HISTORY_END) + wave(i, 0.4, 0.5) * 4 : 0;
   return Math.max(10, base + hist + proj);
 });
 
@@ -42,7 +42,7 @@ export const SIZE_DIST_A_R2: number[] = [3, 10, 22, 30, 26, 18, 10, 5, 2, 1].map
 export const BIOMASS_B: number[] = YEARS.map((_, i) => {
   const base = 100;
   const hist = i <= HISTORY_END ? wave(i, 0.6, 0) * 5 + wave(i, 0.25, 1) * 3 : 0;
-  const proj = i > HISTORY_END ? +0.1 * (i - HISTORY_END) + wave(i, 0.4, 0.5) * 4 - wave(i, 0.15, 0) * 2 : 0;
+  const proj = i > HISTORY_END ? +0.38 * (i - HISTORY_END) + wave(i, 0.4, 0.5) * 4 - wave(i, 0.15, 0) * 2 : 0;
   return Math.max(10, base + hist + proj);
 });
 
